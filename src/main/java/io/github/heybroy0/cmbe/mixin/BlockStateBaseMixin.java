@@ -2,7 +2,7 @@ package io.github.heybroy0.cmbe.mixin;
 
 import io.github.heybroy0.cmbe.config.BlockConfig;
 import io.github.heybroy0.cmbe.config.ConfigStore;
-import net.minecraft.world.level.block.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.PushReaction;
 import org.spongepowered.asm.mixin.Mixin;

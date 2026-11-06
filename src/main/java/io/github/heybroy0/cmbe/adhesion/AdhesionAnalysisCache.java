@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -107,8 +108,8 @@ public final class AdhesionAnalysisCache {
     private static void prepareAnalysisQueue() {
         if (analysisPrepared) return;
         List<Map.Entry<Identifier, Block>> entries = new ArrayList<>();
-        for (Map.Entry<Identifier, Block> entry : BuiltInRegistries.BLOCK.entrySet()) {
-            entries.add(Map.entry(entry.getKey(), entry.getValue()));
+        for (Map.Entry<ResourceKey<Block>, Block> entry : BuiltInRegistries.BLOCK.entrySet()) {
+            entries.add(Map.entry(entry.getKey().location(), entry.getValue()));
         }
         analysisQueue = List.copyOf(entries);
         analysisIndex = 0;

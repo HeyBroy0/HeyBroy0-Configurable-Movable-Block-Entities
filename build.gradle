@@ -35,10 +35,12 @@ dependencies {
     compileOnly "com.terraformersmc:modmenu:21.0.0"
 }
 
+def modVersion = project.version.toString()
+
 processResources {
-    inputs.property "version", project.version
+    inputs.property "version", modVersion
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand "version": modVersion
     }
 }
 
