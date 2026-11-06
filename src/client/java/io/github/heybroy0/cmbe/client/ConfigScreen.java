@@ -469,7 +469,7 @@ public final class ConfigScreen extends Screen {
                 highlightedSuggestion = Math.min(suggestions.size() - 1, highlightedSuggestion + 1);
                 return true;
             }
-            if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_KP_ENTER) {
+            if (event.key() == InputConstants.KEY_RETURN) {
                 String exact = suggestions.stream().filter(value -> value.equalsIgnoreCase(search.trim())).findFirst()
                     .orElse(suggestions.get(highlightedSuggestion));
                 selectBlock(exact);
