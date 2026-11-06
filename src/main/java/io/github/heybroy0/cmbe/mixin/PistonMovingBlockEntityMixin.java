@@ -79,6 +79,22 @@ public abstract class PistonMovingBlockEntityMixin extends BlockEntity implement
         method = "tick",
         at = @At(
             value = "INVOKE",
+            target = "Lnet/minecraft/world/level/block/Block;updateFromNeighbourShapes(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"
+        )
+    )
+    private static BlockState cmbe$updateShapesAgainstPushGroup(
+        BlockState movedState,
+        net.minecraft.world.level.LevelAccessor level,
+        BlockPos pos,
+        Operation<BlockState> original
+    ) {
+        return PistonPushGroups.duringLanding(pos, () -> original.call(movedState, level, pos));
+    }
+
+    @WrapOperation(
+        method = "tick",
+        at = @At(
+            value = "INVOKE",
             target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z",
             ordinal = 1
         )
@@ -149,7 +165,7 @@ public abstract class PistonMovingBlockEntityMixin extends BlockEntity implement
         if (payload == null) return;
         level.removeBlockEntity(pos);
         payload.setLevel(level);
-        payload.worldPosition = pos.immutable();
+        ((BlockEntityAccessor) payload).cmbe$setWorldPosition(pos.immutable());
         payload.clearRemoved();
         level.setBlockEntity(payload);
         payload.setChanged();

@@ -9,7 +9,8 @@
     "PistonStructureAdhesionMixin",
     "PistonMovingBlockEntityMixin",
     "ServerLevelAccessor",
-    "LevelMixin"
+    "LevelMixin",
+    "BlockEntityAccessorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,5 +1,5 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version '1.19-SNAPSHOT'
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
 version = project.mod_version
@@ -11,8 +11,8 @@ base {
 
 repositories {
     maven {
-        name = "Modrinth"
-        url = "https://api.modrinth.com/maven"
+        name = "Terraformers"
+        url = "https://maven.terraformersmc.com/"
     }
 }
 
@@ -28,9 +28,11 @@ loom {
 
 dependencies {
     minecraft "com.mojang:minecraft:" + project.minecraft_version
-    implementation "net.fabricmc:fabric-loader:" + project.loader_version
-    implementation "net.fabricmc.fabric-api:fabric-api:" + project.fabric_api_version
-    modCompileOnly "maven.modrinth:mOgUt4GM:kyy7dbrZ"
+    modImplementation "net.fabricmc:fabric-loader:" + project.loader_version
+    modImplementation "net.fabricmc.fabric-api:fabric-api:" + project.fabric_api_version
+
+    // Optional at runtime; compile against the config-screen API.
+    modCompileOnly "com.terraformersmc:modmenu:21.0.0"
 }
 
 processResources {

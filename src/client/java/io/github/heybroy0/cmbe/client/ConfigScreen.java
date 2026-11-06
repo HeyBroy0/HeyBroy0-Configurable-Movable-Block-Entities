@@ -1,6 +1,7 @@
 package io.github.heybroy0.cmbe.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import io.github.heybroy0.cmbe.adhesion.AdhesionAnalysisCache;
 import io.github.heybroy0.cmbe.config.BlockConfig;
 import io.github.heybroy0.cmbe.config.ConfigStore;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -8,6 +9,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -26,12 +28,13 @@ public final class ConfigScreen extends Screen {
     private String search = "";
     private EditBox searchBox;
     private List<String> suggestions = List.of();
+    private int highlightedSuggestion;
     private int changedScroll;
 
     private int left;
     private int top;
-    private final int panelWidth = 540;
-    private final int panelHeight = 380;
+    private final int panelWidth = 560;
+    private final int panelHeight = 390;
 
     public ConfigScreen(Screen parent) {
         super(Component.literal("Configurable Movable Block Entities"));
@@ -45,12 +48,13 @@ public final class ConfigScreen extends Screen {
         clearWidgets();
 
         if (page == Page.BLOCK) {
-            searchBox = new EditBox(font, left + 18, top + 91, 330, 20, Component.literal("Search blocks"));
+            searchBox = new EditBox(font, left + 18, top + 91, 340, 20, Component.literal("Search blocks"));
             searchBox.setMaxLength(128);
             searchBox.setValue(search);
             searchBox.setResponder(value -> {
                 search = value;
                 suggestions = getSuggestions(value);
+                highlightedSuggestion = 0;
             });
             addRenderableWidget(searchBox);
         } else {
@@ -88,6 +92,7 @@ public final class ConfigScreen extends Screen {
     private void selectBlock(String id) {
         selectedBlock = id;
         search = id;
+        highlightedSuggestion = 0;
         page = Page.BLOCK;
         init();
     }
@@ -109,8 +114,8 @@ public final class ConfigScreen extends Screen {
             case BLOCK -> drawBlockPage(graphics);
             case CHANGED -> drawChangedPage(graphics);
             case ADHESION -> drawAdhesionPage(graphics);
-            case HITBOX -> drawPlaceholder(graphics, "HITBOX ANALYSIS", "Analysis controls are a non-functional template.", "Minimum contact square", "3 x 3 pixels", "Inward sample depth", "2 voxels");
-            case ADVANCED -> drawPlaceholder(graphics, "ADVANCED ADHESION", "Advanced editor controls are a non-functional template.", "Geometry source", "Outline / selection shape", "Face overrides", "F / B / L / R / U / D");
+            case HITBOX -> drawHitboxPage(graphics);
+            case ADVANCED -> drawAdvancedPage(graphics);
         }
     }
 
@@ -156,23 +161,27 @@ public final class ConfigScreen extends Screen {
 
         if (!suggestions.isEmpty()) {
             int suggestionTop = top + 112;
-            graphics.fill(left + 18, suggestionTop, left + 350, suggestionTop + suggestions.size() * 18 + 2, 0xFF111419);
-            graphics.outline(left + 18, suggestionTop, 332, suggestions.size() * 18 + 2, 0xFF697482);
+            graphics.fill(left + 18, suggestionTop, left + 358, suggestionTop + suggestions.size() * 18 + 2, 0xFF111419);
+            graphics.outline(left + 18, suggestionTop, 340, suggestions.size() * 18 + 2, 0xFF697482);
             for (int i = 0; i < suggestions.size(); i++) {
-                text(graphics, suggestions.get(i), left + 25, suggestionTop + 6 + i * 18, 0xFFE1E5EA);
+                int rowY = suggestionTop + 2 + i * 18;
+                if (i == highlightedSuggestion) {
+                    graphics.fill(left + 20, rowY, left + 356, rowY + 18, 0xFF394552);
+                }
+                text(graphics, suggestions.get(i), left + 25, rowY + 5, 0xFFE1E5EA);
             }
         }
 
         BlockConfig c = config();
         int rowY = y + 48;
-        row(graphics, "MOVEMENT", c.movement.name(), x, rowY, 490);
-        row(graphics, "SCHEDULED TICKS", c.scheduledTicks.name(), x, rowY + 36, 490);
-        row(graphics, "PUSH DENOMINATOR", "1 / " + c.pushDenominator, x, rowY + 72, 490);
-        text(graphics, "One block costs 1 / denominator. Default total piston budget: 12.", x, rowY + 106, 0xFF929BA7);
-        text(graphics, "Use the +/- controls at the right of the push denominator row.", x, rowY + 124, 0xFF929BA7);
-        text(graphics, "Hitbox and Advanced are display-only placeholders.", x, top + panelHeight - 30, 0xFFDBB978);
-        text(graphics, "-", x + 450, rowY + 81, 0xFFFFFFFF);
-        text(graphics, "+", x + 474, rowY + 81, 0xFFFFFFFF);
+        row(graphics, "MOVEMENT", c.movement.name(), x, rowY, 500);
+        row(graphics, "SCHEDULED TICKS", c.scheduledTicks.name(), x, rowY + 36, 500);
+        row(graphics, "PUSH DENOMINATOR", "1 / " + c.pushDenominator, x, rowY + 72, 500);
+        text(graphics, "Block cost = 1 / denominator. Default total piston budget: 12.", x, rowY + 108, 0xFF929BA7);
+        text(graphics, "Only explicit per-block settings override vanilla behavior.", x, rowY + 128, 0xFF929BA7);
+        text(graphics, "Use the tabs above to configure adhesion and geometry.", x, top + panelHeight - 28, 0xFFBFC7D2);
+        text(graphics, "−", x + 452, rowY + 81, 0xFFFFFFFF);
+        text(graphics, "+", x + 478, rowY + 81, 0xFFFFFFFF);
     }
 
     private void drawChangedPage(GuiGraphicsExtractor graphics) {
@@ -187,40 +196,108 @@ public final class ConfigScreen extends Screen {
         int visible = Math.min(10, ids.size() - changedScroll);
         for (int i = 0; i < visible; i++) {
             int lineY = y + 24 + i * 22;
-            graphics.fill(x, lineY, x + 500, lineY + 20, 0xFF2B3038);
+            graphics.fill(x, lineY, x + 510, lineY + 20, 0xFF2B3038);
             text(graphics, ids.get(i + changedScroll), x + 8, lineY + 6, 0xFFFFFFFF);
             text(graphics, "FOCUS", x + 405, lineY + 6, 0xFF91C9FF);
-            text(graphics, "REVERT", x + 455, lineY + 6, 0xFFE5A4A4);
+            text(graphics, "REVERT", x + 465, lineY + 6, 0xFFE5A4A4);
         }
+    }
+
+    private String displayAdhesion(BlockConfig.Adhesion adhesion) {
+        return switch (adhesion) {
+            case VANILLA -> "VANILLA";
+            case ADHESIVE -> "ADHESIVE (ALL FACES)";
+            case GLAZED -> "GLAZED (NO FACES)";
+            case HITBOX -> "HITBOX";
+            case ADVANCED -> "ADVANCED";
+        };
     }
 
     private void drawAdhesionPage(GuiGraphicsExtractor graphics) {
         int x = contentX();
         int y = contentY();
+        BlockConfig c = config();
         text(graphics, "ADHESION MODE FOR " + selectedBlock, x, y - 4, 0xFFBFC7D2);
-        row(graphics, "MODE", config().adhesion.name(), x, y + 28, 490);
+        row(graphics, "MODE", displayAdhesion(c.adhesion), x, y + 28, 500);
         text(graphics, "VANILLA — preserve the block's normal sticky behavior.", x, y + 76, 0xFFE1E5EA);
-        text(graphics, "ALL — allow adhesion on all six faces.", x, y + 99, 0xFFE1E5EA);
-        text(graphics, "NONE — disable adhesion on all six faces.", x, y + 122, 0xFFE1E5EA);
-        text(graphics, "HITBOX / ADVANCED currently fall back to vanilla.", x, y + 159, 0xFFDBB978);
+        text(graphics, "ADHESIVE (ALL) — allow adhesion on all six faces.", x, y + 99, 0xFFE1E5EA);
+        text(graphics, "GLAZED (NONE) — this block contributes no adhesive faces.", x, y + 122, 0xFFE1E5EA);
+        text(graphics, "HITBOX — use cached outline/collision geometry per face.", x, y + 145, 0xFFE1E5EA);
+        text(graphics, "ADVANCED — use the manual six-face configuration.", x, y + 168, 0xFFE1E5EA);
+        if (c.adhesion == BlockConfig.Adhesion.HITBOX) {
+            actionButton(graphics, "CONFIGURE HITBOX", x, y + 204, 172, 26, true);
+        } else if (c.adhesion == BlockConfig.Adhesion.ADVANCED) {
+            actionButton(graphics, "CONFIGURE ADVANCED", x, y + 204, 190, 26, true);
+        }
     }
 
-    private void drawPlaceholder(GuiGraphicsExtractor graphics, String heading, String description,
-                                 String a, String av, String b, String bv) {
+    private void drawHitboxPage(GuiGraphicsExtractor graphics) {
         int x = contentX();
         int y = contentY();
-        text(graphics, heading, x, y - 4, 0xFFFFFFFF);
-        text(graphics, description, x, y + 26, 0xFFBFC7D2);
-        placeholderSlider(graphics, a, av, x, y + 75);
-        placeholderSlider(graphics, b, bv, x, y + 145);
-        text(graphics, "UI only — values are not applied to block behavior.", x, y + 218, 0xFFDBB978);
+        BlockConfig c = config();
+        text(graphics, "HITBOX ADHESION — " + selectedBlock, x, y - 4, 0xFFFFFFFF);
+        text(graphics, "Measures the largest fully occupied square on each face.", x, y + 22, 0xFFBFC7D2);
+
+        row(graphics, "GEOMETRY SOURCE", c.geometrySource.name(), x, y + 47, 500);
+        drawSlider(graphics, "MINIMUM CONTACT SQUARE", c.hitboxMinimumSquare, 1, 16, x, y + 105);
+        drawSlider(graphics, "INWARD DEPTH (VOXELS)", c.hitboxDepth, 1, 16, x, y + 169);
+
+        text(graphics, "Default: 3 × 3 pixels, sampled 2 voxels inward.", x, y + 235, 0xFF929BA7);
+        text(graphics, "Composter rims and narrow strips fail the 3 × 3 test.", x, y + 254, 0xFF929BA7);
+        String status = AdhesionAnalysisCache.isTruncated(selectedBlock)
+            ? "Analysis is bounded; some states require a custom adapter."
+            : "Geometry measurements are cached before piston movement.";
+        text(graphics, status, x, y + 286, 0xFFDBB978);
+        text(graphics, "Detected geometry properties: " + String.join(", ", AdhesionAnalysisCache.geometryProperties(selectedBlock)), x, y + 306, 0xFFBFC7D2);
     }
 
-    private void placeholderSlider(GuiGraphicsExtractor graphics, String label, String value, int x, int y) {
+    private void drawSlider(GuiGraphicsExtractor graphics, String label, int value, int min, int max, int x, int y) {
         text(graphics, label + ": " + value, x, y, 0xFFBFC7D2);
-        graphics.fill(x, y + 24, x + 440, y + 30, 0xFF454B54);
-        graphics.fill(x, y + 24, x + 118, y + 30, 0xFF8B929C);
-        graphics.outline(x, y + 20, 440, 14, 0xFF606873);
+        int trackX = x;
+        int trackY = y + 22;
+        int trackWidth = 480;
+        graphics.fill(trackX, trackY, trackX + trackWidth, trackY + 6, 0xFF454B54);
+        int filled = (int) Math.round((value - min) / (double) (max - min) * trackWidth);
+        graphics.fill(trackX, trackY, trackX + filled, trackY + 6, 0xFF8B929C);
+        graphics.fill(trackX + filled - 3, trackY - 4, trackX + filled + 4, trackY + 10, 0xFFD8DEE7);
+        graphics.outline(trackX, trackY - 4, trackWidth, 14, 0xFF606873);
+        text(graphics, String.valueOf(min), trackX, trackY + 17, 0xFF929BA7);
+        text(graphics, String.valueOf(max), trackX + trackWidth - 8, trackY + 17, 0xFF929BA7);
+    }
+
+    private void drawAdvancedPage(GuiGraphicsExtractor graphics) {
+        int x = contentX();
+        int y = contentY();
+        BlockConfig c = config();
+        text(graphics, "ADVANCED ADHESION — " + selectedBlock, x, y - 4, 0xFFFFFFFF);
+        text(graphics, "Optional orientation property", x, y + 22, 0xFFBFC7D2);
+        String orientation = c.orientationProperty.isBlank() ? "Absolute directions" : c.orientationProperty;
+        row(graphics, "ORIENTATION", orientation, x, y + 42, 500);
+        text(graphics, "Select a Direction-valued property, or leave unset for absolute faces.", x, y + 76, 0xFF929BA7);
+        text(graphics, "Detected orientation properties: " + String.join(", ", AdhesionAnalysisCache.directionProperties(selectedBlock)), x, y + 95, 0xFF929BA7);
+
+        text(graphics, "TOGGLE ADHESIVE FACES", x, y + 126, 0xFFBFC7D2);
+        drawFaceTile(graphics, "U", c.manualUp, x + 90, y + 151);
+        drawFaceTile(graphics, "L", c.manualLeft, x + 40, y + 199);
+        drawFaceTile(graphics, "F", c.manualFront, x + 90, y + 199);
+        drawFaceTile(graphics, "R", c.manualRight, x + 140, y + 199);
+        drawFaceTile(graphics, "B", c.manualBack, x + 190, y + 199);
+        drawFaceTile(graphics, "D", c.manualDown, x + 90, y + 247);
+        text(graphics, "Green = adhesive; red = non-adhesive.", x + 270, y + 183, 0xFFBFC7D2);
+        text(graphics, "Manual faces do not alter the block's real orientation or state.", x + 270, y + 205, 0xFF929BA7);
+    }
+
+    private void drawFaceTile(GuiGraphicsExtractor graphics, String label, boolean enabled, int x, int y) {
+        int color = enabled ? 0xFF276B45 : 0xFF8B3434;
+        graphics.fill(x, y, x + 44, y + 42, color);
+        graphics.outline(x, y, 44, 42, 0xFFB9C0C9);
+        centered(graphics, label, x + 22, y + 16, 0xFFFFFFFF);
+    }
+
+    private void actionButton(GuiGraphicsExtractor graphics, String label, int x, int y, int w, int h, boolean enabled) {
+        graphics.fill(x, y, x + w, y + h, enabled ? 0xFF46515E : 0xFF30363E);
+        graphics.outline(x, y, w, h, 0xFF697482);
+        centered(graphics, label, x + w / 2, y + 8, 0xFFFFFFFF);
     }
 
     @Override
@@ -232,35 +309,94 @@ public final class ConfigScreen extends Screen {
 
         if (page == Page.BLOCK) {
             int suggestTop = top + 112;
-            if (x >= left + 18 && x <= left + 350 && y >= suggestTop && y < suggestTop + suggestions.size() * 18 + 2) {
+            if (x >= left + 18 && x <= left + 358 && y >= suggestTop && y < suggestTop + suggestions.size() * 18 + 2) {
                 int index = (y - suggestTop - 2) / 18;
                 if (index >= 0 && index < suggestions.size()) selectBlock(suggestions.get(index));
                 return true;
             }
             int rowX = contentX();
             int rowY = contentY() + 48;
-            if (inside(x, y, rowX, rowY, 490, 27)) {
+            if (inside(x, y, rowX, rowY, 500, 27)) {
                 change(c -> c.movement = BlockConfig.Movement.values()[(c.movement.ordinal() + 1) % BlockConfig.Movement.values().length]);
                 return true;
             }
-            if (inside(x, y, rowX, rowY + 36, 490, 27)) {
+            if (inside(x, y, rowX, rowY + 36, 500, 27)) {
                 change(c -> c.scheduledTicks = BlockConfig.ScheduledTicks.values()[(c.scheduledTicks.ordinal() + 1) % BlockConfig.ScheduledTicks.values().length]);
                 return true;
             }
-            if (inside(x, y, rowX + 444, rowY + 72, 22, 27)) {
+            if (inside(x, y, rowX + 448, rowY + 72, 24, 27)) {
                 change(c -> c.pushDenominator = BlockConfig.sanitizeDenominator(c.pushDenominator - 1));
                 return true;
             }
-            if (inside(x, y, rowX + 468, rowY + 72, 22, 27)) {
+            if (inside(x, y, rowX + 474, rowY + 72, 24, 27)) {
                 change(c -> c.pushDenominator = BlockConfig.sanitizeDenominator(c.pushDenominator + 1));
                 return true;
             }
         } else if (page == Page.ADHESION) {
             int x0 = contentX();
             int y0 = contentY() + 28;
-            if (inside(x, y, x0, y0, 490, 27)) {
+            if (inside(x, y, x0, y0, 500, 27)) {
                 change(c -> c.adhesion = BlockConfig.Adhesion.values()[(c.adhesion.ordinal() + 1) % BlockConfig.Adhesion.values().length]);
                 return true;
+            }
+            int buttonY = contentY() + 204;
+            if (config().adhesion == BlockConfig.Adhesion.HITBOX && inside(x, y, x0, buttonY, 172, 26)) {
+                page = Page.HITBOX;
+                init();
+                return true;
+            }
+            if (config().adhesion == BlockConfig.Adhesion.ADVANCED && inside(x, y, x0, buttonY, 190, 26)) {
+                page = Page.ADVANCED;
+                init();
+                return true;
+            }
+        } else if (page == Page.HITBOX) {
+            int x0 = contentX();
+            int y0 = contentY();
+            if (inside(x, y, x0, y0 + 47, 500, 27)) {
+                change(c -> c.geometrySource = c.geometrySource == BlockConfig.GeometrySource.OUTLINE
+                    ? BlockConfig.GeometrySource.COLLISION : BlockConfig.GeometrySource.OUTLINE);
+                return true;
+            }
+            if (inside(x, y, x0, y0 + 127, 480, 6)) {
+                int value = sliderValue(x, x0, 480);
+                change(c -> c.hitboxMinimumSquare = value);
+                return true;
+            }
+            if (inside(x, y, x0, y0 + 191, 480, 6)) {
+                int value = sliderValue(x, x0, 480);
+                change(c -> c.hitboxDepth = value);
+                return true;
+            }
+        } else if (page == Page.ADVANCED) {
+            int x0 = contentX();
+            int y0 = contentY();
+            if (inside(x, y, x0, y0 + 42, 500, 27)) {
+                List<String> candidates = new ArrayList<>();
+                candidates.add("");
+                candidates.addAll(AdhesionAnalysisCache.directionProperties(selectedBlock));
+                int current = candidates.indexOf(config().orientationProperty);
+                String next = candidates.get((current + 1 + candidates.size()) % candidates.size());
+                change(c -> c.orientationProperty = next);
+                return true;
+            }
+            if (inside(x, y, x0 + 90, y0 + 151, 44, 42)) {
+                change(c -> c.manualUp = !c.manualUp); return true;
+            }
+            if (inside(x, y, x0 + 40, y0 + 199, 44, 42)) {
+                change(c -> c.manualLeft = !c.manualLeft); return true;
+            }
+            if (inside(x, y, x0 + 90, y0 + 199, 44, 42)) {
+                change(c -> c.manualFront = !c.manualFront); return true;
+            }
+            if (inside(x, y, x0 + 140, y0 + 199, 44, 42)) {
+                change(c -> c.manualRight = !c.manualRight); return true;
+            }
+            if (inside(x, y, x0 + 190, y0 + 199, 44, 42)) {
+                change(c -> c.manualBack = !c.manualBack); return true;
+            }
+            if (inside(x, y, x0 + 90, y0 + 247, 44, 42)) {
+                change(c -> c.manualDown = !c.manualDown); return true;
             }
         } else if (page == Page.CHANGED) {
             List<String> ids = new ArrayList<>(ConfigStore.snapshot().keySet());
@@ -269,13 +405,11 @@ public final class ConfigScreen extends Screen {
                 int rowY = start + i * 22;
                 if (y >= rowY && y <= rowY + 20) {
                     String id = ids.get(i + changedScroll);
-                    if (x >= contentX() + 400 && x < contentX() + 452) {
+                    if (x >= contentX() + 400 && x < contentX() + 458) {
                         selectBlock(id);
-                        page = Page.BLOCK;
-                        init();
                         return true;
                     }
-                    if (x >= contentX() + 452 && x < contentX() + 510) {
+                    if (x >= contentX() + 458 && x < contentX() + 520) {
                         ConfigStore.revert(id);
                         init();
                         return true;
@@ -284,6 +418,11 @@ public final class ConfigScreen extends Screen {
             }
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    private int sliderValue(int mouseX, int trackX, int trackWidth) {
+        double progress = Math.max(0.0, Math.min(1.0, (mouseX - trackX) / (double) trackWidth));
+        return 1 + (int) Math.round(progress * 15);
     }
 
     private boolean clickTab(int x, int y) {
@@ -320,16 +459,26 @@ public final class ConfigScreen extends Screen {
             onClose();
             return true;
         }
-        if (page == Page.BLOCK && searchBox != null
-            && (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_KP_ENTER)
-            && !suggestions.isEmpty()) {
-            selectBlock(suggestions.getFirst());
-            return true;
-        }
-        if (page == Page.BLOCK && event.key() == InputConstants.KEY_TAB && !suggestions.isEmpty()) {
-            search = suggestions.getFirst();
-            if (searchBox != null) searchBox.setValue(search);
-            return true;
+        if (page == Page.BLOCK && searchBox != null && !suggestions.isEmpty()) {
+            if (event.key() == InputConstants.KEY_UP) {
+                highlightedSuggestion = Math.max(0, highlightedSuggestion - 1);
+                return true;
+            }
+            if (event.key() == InputConstants.KEY_DOWN) {
+                highlightedSuggestion = Math.min(suggestions.size() - 1, highlightedSuggestion + 1);
+                return true;
+            }
+            if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_KP_ENTER) {
+                String exact = suggestions.stream().filter(value -> value.equalsIgnoreCase(search.trim())).findFirst()
+                    .orElse(suggestions.get(highlightedSuggestion));
+                selectBlock(exact);
+                return true;
+            }
+            if (event.key() == InputConstants.KEY_TAB) {
+                search = suggestions.get(highlightedSuggestion);
+                searchBox.setValue(search);
+                return true;
+            }
         }
         return super.keyPressed(event);
     }
