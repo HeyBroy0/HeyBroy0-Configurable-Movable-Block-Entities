@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "cmbe",
+  "version": "${version}",
+  "name": "Configurable Movable Block Entities",
+  "description": "Per-block piston movement, block entity transport, scheduled ticks, push cost and adhesion.",
+  "authors": ["HeyBroy0"],
+  "contact": {
+    "sources": "https://github.com/HeyBroy0/HeyBroy0-Configurable-Movable-Block-Entities"
+  },
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["io.github.heybroy0.cmbe.CmbeMod"],
+    "client": ["io.github.heybroy0.cmbe.client.CmbeClient"],
+    "modmenu": ["io.github.heybroy0.cmbe.client.CmbeModMenu"]
+  },
+  "mixins": ["cmbe.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

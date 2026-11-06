@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "io.github.heybroy0.cmbe.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "BlockStateBaseMixin",
+    "PistonBaseBlockMixin",
+    "PistonStructureResolverMixin",
+    "PistonStructureAdhesionMixin",
+    "PistonMovingBlockEntityMixin",
+    "ServerLevelAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
