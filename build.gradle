@@ -32,7 +32,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:" + project.fabric_api_version
 
     // Optional at runtime; compile against the config-screen API.
-    modCompileOnly "com.terraformersmc:modmenu:21.0.0"
+    compileOnly "com.terraformersmc:modmenu:21.0.0"
 }
 
 processResources {
