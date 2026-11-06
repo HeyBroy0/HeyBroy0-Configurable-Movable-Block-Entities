@@ -8,6 +8,7 @@ import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import io.github.heybroy0.cmbe.config.BlockConfig;
 import io.github.heybroy0.cmbe.config.ConfigStore;
 import io.github.heybroy0.cmbe.piston.PistonMovingBlockEntityExtension;
+import io.github.heybroy0.cmbe.piston.PistonPushGroups;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
@@ -29,17 +30,27 @@ import java.util.List;
 
 @Mixin(value = PistonBaseBlock.class, priority = 943)
 public abstract class PistonBaseBlockMixin {
+    @Inject(method = "moveBlocks", at = @At("HEAD"))
+    private void cmbe$beginPushGroup(
+        Level level, BlockPos pistonPos, Direction direction, boolean extending,
+        CallbackInfoReturnable<Boolean> cir
+    ) {
+        PistonPushGroups.beginOperation();
+    }
+
+    @Inject(method = "moveBlocks", at = @At("RETURN"))
+    private void cmbe$finishPushGroup(
+        Level level, BlockPos pistonPos, Direction direction, boolean extending,
+        CallbackInfoReturnable<Boolean> cir
+    ) {
+        PistonPushGroups.finishOperation();
+    }
+
     @WrapOperation(
         method = "isPushable",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/level/block/state/BlockState;hasBlockEntity()Z"
-        )
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;hasBlockEntity()Z")
     )
-    private static boolean cmbe$permitConfiguredBlockEntity(
-        BlockState state,
-        Operation<Boolean> original
-    ) {
+    private static boolean cmbe$permitConfiguredBlockEntity(BlockState state, Operation<Boolean> original) {
         if (ConfigStore.get(state).movement == BlockConfig.Movement.MOVABLE) return false;
         return original.call(state);
     }
@@ -68,6 +79,8 @@ public abstract class PistonBaseBlockMixin {
         BlockState movedState = toPushShapes.get(i);
         BlockPos source = pos.relative(pushDirection.getOpposite());
 
+        PistonPushGroups.record(source, pos, movedState);
+
         if (ConfigStore.get(movedState).movement == BlockConfig.Movement.MOVABLE
             && level.getBlockEntity(source) instanceof BlockEntity blockEntity) {
             carried.set(blockEntity);
@@ -86,13 +99,8 @@ public abstract class PistonBaseBlockMixin {
         )
     )
     private BlockEntity cmbe$attachPayloadToMovingEntity(
-        BlockPos position,
-        BlockState blockState,
-        BlockState movedState,
-        Direction direction,
-        boolean extending,
-        boolean sourcePiston,
-        Operation<BlockEntity> original,
+        BlockPos position, BlockState blockState, BlockState movedState, Direction direction,
+        boolean extending, boolean sourcePiston, Operation<BlockEntity> original,
         @Share(value = "cmbe$carriedBlockEntity", namespace = "cmbe") LocalRef<BlockEntity> carried
     ) {
         BlockEntity movingEntity = original.call(position, blockState, movedState, direction, extending, sourcePiston);
@@ -102,13 +110,11 @@ public abstract class PistonBaseBlockMixin {
         return movingEntity;
     }
 
-    @SuppressWarnings("unchecked")
     private static void cmbe$moveScheduledTicks(Level level, BlockPos source, BlockPos destination, BlockState movedState) {
         BlockConfig.ScheduledTicks mode = ConfigStore.get(movedState).scheduledTicks;
         if (mode == BlockConfig.ScheduledTicks.VANILLA || !(level instanceof ServerLevel serverLevel)) return;
 
-        ServerLevelAccessor access = (ServerLevelAccessor) serverLevel;
-        LevelTicks<Block> ticks = access.cmbe$getBlockTicks();
+        LevelTicks<Block> ticks = ((ServerLevelAccessor) serverLevel).cmbe$getBlockTicks();
         BoundingBox sourceBox = new BoundingBox(
             source.getX(), source.getY(), source.getZ(),
             source.getX(), source.getY(), source.getZ()
@@ -118,7 +124,6 @@ public abstract class PistonBaseBlockMixin {
             destination.getY() - source.getY(),
             destination.getZ() - source.getZ()
         );
-
         ticks.copyArea(sourceBox, offset);
         if (mode == BlockConfig.ScheduledTicks.TRANSFER) ticks.clearArea(sourceBox);
     }

@@ -1,7 +1,10 @@
 package io.github.heybroy0.cmbe.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.serialization.Codec;
 import io.github.heybroy0.cmbe.piston.PistonMovingBlockEntityExtension;
+import io.github.heybroy0.cmbe.piston.PistonPushGroups;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.Level;
@@ -50,11 +53,9 @@ public abstract class PistonMovingBlockEntityMixin extends BlockEntity implement
     private void cmbe$loadCarriedBlockEntity(ValueInput input, CallbackInfo ci) {
         Optional<ValueInput> child = input.child(CMBE_PAYLOAD_KEY);
         if (child.isEmpty()) return;
-
         ValueInput payload = child.get();
         Optional<BlockEntityType<?>> type = payload.read("id", CMBE_TYPE_CODEC);
         if (type.isEmpty()) return;
-
         BlockPos savedPos = new BlockPos(
             payload.getIntOr("x", this.worldPosition.getX()),
             payload.getIntOr("y", this.worldPosition.getY()),
@@ -74,6 +75,45 @@ public abstract class PistonMovingBlockEntityMixin extends BlockEntity implement
         }
     }
 
+    @WrapOperation(
+        method = "tick",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z",
+            ordinal = 1
+        )
+    )
+    private static boolean cmbe$landAgainstPushGroup(
+        Level level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original
+    ) {
+        boolean placed = PistonPushGroups.duringLanding(pos, () -> {
+            boolean result = original.call(level, pos, state, flags);
+            if (result) PistonPushGroups.fastLandMultiblockCompanion(level, pos);
+            return result;
+        });
+        if (placed) PistonPushGroups.memberLanded(pos);
+        return placed;
+    }
+
+    @WrapOperation(
+        method = "finalTick",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"
+        )
+    )
+    private boolean cmbe$fastLandAgainstPushGroup(
+        Level level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original
+    ) {
+        boolean placed = PistonPushGroups.duringLanding(pos, () -> {
+            boolean result = original.call(level, pos, state, flags);
+            if (result) PistonPushGroups.fastLandMultiblockCompanion(level, pos);
+            return result;
+        });
+        if (placed) PistonPushGroups.memberLanded(pos);
+        return placed;
+    }
+
     @Inject(
         method = "tick",
         at = @At(
@@ -84,8 +124,7 @@ public abstract class PistonMovingBlockEntityMixin extends BlockEntity implement
         )
     )
     private static void cmbe$restoreOnAnimatedLanding(
-        Level level, BlockPos pos, BlockState state, PistonMovingBlockEntity moving,
-        CallbackInfo ci
+        Level level, BlockPos pos, BlockState state, PistonMovingBlockEntity moving, CallbackInfo ci
     ) {
         if (level.isClientSide()) return;
         cmbe$restore(level, pos, ((PistonMovingBlockEntityExtension) moving).cmbe$takeCarriedBlockEntity());
