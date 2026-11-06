@@ -109,7 +109,7 @@ public final class AdhesionAnalysisCache {
         if (analysisPrepared) return;
         List<Map.Entry<Identifier, Block>> entries = new ArrayList<>();
         for (Map.Entry<ResourceKey<Block>, Block> entry : BuiltInRegistries.BLOCK.entrySet()) {
-            entries.add(Map.entry(entry.getKey().location(), entry.getValue()));
+            entries.add(Map.entry(entry.getKey().identifier(), entry.getValue()));
         }
         analysisQueue = List.copyOf(entries);
         analysisIndex = 0;

@@ -69,7 +69,7 @@ public final class ConfigScreen extends Screen {
 
         List<String> results = new ArrayList<>(8);
         for (Map.Entry<ResourceKey<Block>, Block> entry : BuiltInRegistries.BLOCK.entrySet()) {
-            String id = entry.getKey().location().toString();
+            String id = entry.getKey().identifier().toString();
             String displayName = entry.getValue().getName().getString().toLowerCase();
             if (id.contains(needle) || displayName.contains(needle)) {
                 results.add(id);
