@@ -3,32 +3,23 @@
 ## Project objective
 
 Create a buildable Minecraft Fabric mod for **Minecraft 26.3** that allows configurable piston movement of block entities and multiblock structures.
-
 The mod should extend vanilla piston behavior while preserving vanilla mechanics wherever possible.
-
 The project already uses FrozenLib. Use it where appropriate, and avoid adding unnecessary dependencies.
-
 The mod must build through GitHub Actions.
-
 ---
 
 ## Inspect and establish the development environment
-
 Before implementing features:
-
 1. Inspect the existing repository, project structure, Gradle configuration, and current source code.
 2. Verify the exact Minecraft 26.3 version, Fabric Loader, Fabric API, FrozenLib, Java, Gradle, and mappings requirements.
 3. Use the actual Minecraft 26.3 API names and properties. Do not rely on older Yarn names or outdated tutorials.
 4. Verify that every dependency has a compatible 26.3 Fabric release.
 5. Preserve existing project functionality and coding conventions.
 6. Do not upgrade or replace dependencies without a demonstrated reason.
-
 Do not assume that APIs, methods, or fields from earlier Minecraft versions remain available.
 
 ## Create the configuration interface
-
 Create a sleek dark-grey GUI using the existing project conventions and FrozenLib where useful.
-
 Requirements:
 - Support Mod Menu integration.
 - Add a configurable keyboard shortcut to open the GUI.
@@ -38,144 +29,69 @@ Requirements:
 - Support scrolling where lists exceed the available screen space.
 
 ### Main page
-
 The main page should contain:
-
 **Block search**
 - Search blocks by registry identifier and, where available, display name.
 - Show matching suggestions in a dropdown.
 - Support keyboard navigation through suggestions.
 - Tab accepts/fills the selected suggestion.
 - Enter selects the highlighted suggestion or opens an exact match.
-- Avoid silently replacing the user's input with an incorrect suggestion.
-
+- Avoid replacing the user's input with an incorrect suggestion.
 After selecting a block, display its current configuration next to the relevant controls.
 
 **Block configuration controls**
-
-| Setting | Options |
+| Main | Changed Blocks | 
 |---|---|
 | Movement | Vanilla, Movable, Breakable, Immovable |
 | Scheduled ticks | Vanilla, Transfer, Duplicate |
 | Push cost | Positive integer denominator |
+| Adhesion | Vanilla, Adhesive, Glazed, Hitbox, Advanced | Advanced (Hidden unless Advanced) |
 
-Define the movement options as follows:
-
-- **Vanilla:** Preserve the block's existing vanilla piston behavior.
-- **Movable:** Allow the block to be pushed, including supported block entities, even when vanilla would normally prevent movement.
-- **Breakable:** Destroy the block when a piston attempts to move it, following appropriate vanilla destruction and drop behavior.
-- **Immovable:** Prevent piston movement and destruction of the block.
-
-Do not let these settings accidentally bypass safety checks or cause block entity duplication.
-
-### Changed blocks page
-
-Add a separate page accessible through a navigation button beside the main content.
-
-Show a scrollable list of blocks whose configurations differ from their effective defaults.
-
-Each entry should have:
-
-- **Revert:** Remove the custom configuration and restore its default behavior.
-- **Focus:** Return to the main page and populate the search bar with that block.
-
-Reverting should only affect the selected block.
-
----
-
-## Define push cost
-
-Push cost represents how much of the vanilla piston push capacity a block consumes.
-
-The setting is represented by a positive integer denominator.
-
-Examples:
-
-| Denominator | Cost per block |
-|---|---|
-| 1 | 1 |
-| 2 | 1/2 |
-| 3 | 1/3 |
-| 4 | 1/4 |
-
-The default is 1.
-
-Calculate total movement cost as:
-
-`Total cost = sum of 1 / denominator for each moved block`
-
-Use the vanilla 12-block capacity as the default total cost budget.
-
-For example, two blocks with denominator 2 consume the same budget as one normal block.
-
-Requirements:
-- Accept positive integers only.
-- Never permit zero or negative values.
-- Calculate without rounding away fractional costs.
-- Count each physical block only once.
-- Include additional multiblock components in the cost calculation.
-- Exclude destroyed blocks from movement cost.
-- Ensure the movement resolver and its internal collections can safely handle configurations that allow more than 12 physical blocks.
-- Preserve vanilla limits for blocks configured to use vanilla behavior.
-
-Avoid implementing an unlimited movement system. Apply sensible safety limits if required by the actual Minecraft implementation.
-
----
+#### Movement options:
+- **Vanilla:** Preserve the block's existing vanilla piston behavior. (Default)
+- **Movable:** Allows the block to be pushed, including supported block entities, even when vanilla would normally prevent movement.
+- **Breakable:** Destroy the block when a piston attempts to move it, following appropriate vanilla destruction and drop behavior, Doesn't increase push limit.
+- **Immovable:** Prevent piston movement and destruction of the block. do not change fluid tick behavior.
 
 ## Scheduled-tick behavior
+Scheduled-tick handling must be configurable per block, uninvasive using Minecraft's existing tick scheduler.
+Performs tick operations exactly once per movement transaction.
 
-Scheduled-tick handling must be configurable per block.
+- **VANILLA** Default. Block acts normally, preserve normal cancellation and execution semantics.
 
-Three options:
+- **TRANSFER** Move eligible pending block ticks from the original position to the destination, preserving their original trigger time, remaining delay, priority, and ordering as closely as the vanilla scheduler permits. Applied after the block lands.
 
-**VANILLA**
-- Default.
-- Do not interfere with vanilla scheduled-tick behavior.
-- Preserve normal cancellation and execution semantics.
-
-**TRANSFER**
-- Move eligible pending block ticks from the original position to the destination.
-- Preserve their original trigger time, remaining delay, priority, and ordering as closely as the vanilla scheduler permits.
-- Do not restart the timer simply because a block moved.
-
-**DUPLICATE**
-- Leave the original scheduled tick untouched.
-- Create an equivalent pending tick for the destination.
-- Preserve its timing and priority.
-
-Requirements:
-- Perform tick operations exactly once per movement transaction.
-- Avoid creating repeated duplicates during piston animation or landing.
-- Use Minecraft's existing tick scheduler.
-- Do not create a separate custom tick scheduler.
-- Do not change fluid tick behavior by default.
-- Do not alter scheduled ticks for blocks configured as Vanilla.
-
-Transfer and Duplicate are explicit opt-in behaviors. Existing vanilla redstone behavior must remain unchanged under the default setting.
+- **DUPLICATE** Leave the original scheduled tick untouched and create a copy pending tick for the destination.
 
 If the relevant scheduler operation requires internal access, investigate the 26.3 implementation and use the smallest appropriate Mixin or access widener.
 
+## Define push cost
+Push cost represents how much of the vanilla piston push capacity a block consumes.
+The setting is represented by a positive integer denominator. The default is 1.
+Be careful of floating point error
+
+- Accept positive nonzero integers only.
+- Count each physical block only once. Multiblock like doors and beds add 2 physical blocks.
+- Preserve vanilla limits for blocks configured to use vanilla movement behavior. (ignore push cost)
+---
+
+### Changed blocks page
+Show a scrollable list of blocks whose configurations differ from their effective defaults.
+Each entry should have:
+- **Name and display of block**
+- **Revert:** Remove the custom configuration and restore its default behavior.
+- **Focus:** Return to the main page and populate the search bar with that block.
 ---
 
 ## Implement piston push groups
+Create a performant temporary movement context for every piston push or retraction operation.
 
-Create a temporary movement context for every piston push or retraction operation.
-
-A push group includes:
-- Every block being moved by that piston operation.
-- Relevant block entity data.
-- Original and destination positions.
-- Multiblock relationships.
-- Piston-head creation or retraction information.
-
-The context must remain available throughout the movement and landing process, including relevant sub-tick block events.
-
-It must not be shared accidentally between unrelated piston operations.
+A push group includes every block being moved by that piston operation and piston-head creation or retraction.
+The context must remain available throughout the movement and landing process, including relevant sub-tick block events such as starting movement.
+It is unique and must not be shared between any other piston operations.
 
 ### Group destination awareness
-
 Implement group-scoped destination awareness for survival checks.
-
 When a block in the group performs a survival or relevant neighbor-shape check, it should perceive:
 
 - Itself at its intended destination.
@@ -183,36 +99,25 @@ When a block in the group performs a survival or relevant neighbor-shape check, 
 - A moved block's original position as empty, unless another group member occupies it in the final arrangement.
 - Unrelated blocks exactly as they exist in the real world.
 
-This is NOT a request for a full projected-world implementation.
-
+a full projected-world implementation is probably overkill
 Only the participating push group should receive this temporary behavior.
 
 ### Initial movement checks
-
 When the piston initially resolves its movement:
 - Establish the complete movement group before performing dependent survival checks.
-- Include relevant multiblock companions and supports.
-- Allow blocks to pass survival checks when their required support is part of the same movement group.
-- Do not let processing order determine whether a block survives.
-
-For example, a torch should not break simply because its supporting block is scheduled to land after it.
+- Include relevant multiblock companions.
+- Allow blocks to pass survival checks when their required support such as companion or attached wall or floor is part of the same movement group.
+- Do not let processing order determine whether a block survives so a block that moves first doesn't destroy itself or destroys a neighboring block.
 
 ### Landing checks
-
-During landing:
 - Blocks must see their group companions and supporting blocks in their intended or already completed positions.
 - A block should not disappear because another group member has not physically landed yet.
-- Once a block has landed, its actual world state should be used.
 - Remove completed members from active group tracking when they are no longer needed.
-
 Do not modify unrelated world queries or globally change normal survival behavior.
-
 ---
 
 ## Multiblock movement and coordinated landing
-
 Support vanilla and modded structures containing multiple connected blocks.
-
 Examples:
 - Doors.
 - Beds.
@@ -221,49 +126,36 @@ Examples:
 - Other modded multiblocks.
 
 ### Structure resolution
-
 Before movement:
 1. Identify all components belonging to a movable structure.
 2. Include all required companions in the movement group.
 3. Calculate their destination positions.
 4. Validate the complete structure.
 5. Prevent partial movement when the structure cannot move as a whole.
-
 Preserve individual block states and relevant block entity data.
-
 Do not assume that a property called `type`, `part`, or `half` has a universal meaning. Use appropriate vanilla-specific handling or registered mod adapters.
-
-Tiny Multiblock Lib may be investigated as a possible helper, but do not add it automatically. Verify its actual 26.3 Fabric compatibility and whether it provides the required functionality.
+Tiny Multiblock Lib may be investigated for implementation ideas or as a possible helper.
 
 ### Coordinated landing
-
 When a multiblock component lands:
-
 - Its required companions must land in the same coordinated landing operation.
 - Perform the operation synchronously and prevent unrelated block updates from interrupting partial structure placement.
 - Ensure the complete structure is placed before ordinary neighbor notifications where possible.
 - Avoid duplicate placement, duplicated block entities, or multiple landing operations for the same component.
-
 This requirement applies to the multiblock and its companions, not automatically to every block in the entire piston push group.
 
 ### Fast landing
-
 Some blocks may land immediately rather than following the normal moving-block animation.
-
 When this happens:
 - Mark the block as landed.
 - Remove it from active movement tracking once its actual destination state is established.
 - If it belongs to a multiblock, immediately coordinate the companion's landing.
 - Prevent the companion from being processed again by a later scheduled landing event.
-
 Make landing operations idempotent so multiple update paths cannot cause duplication or corruption.
-
 ---
 
 ## Move block entities safely
-
 Support moving blocks containing block entities and persistent data.
-
 Examples include:
 - Chests and inventories.
 - Furnaces and processing machines.
@@ -284,7 +176,6 @@ Do not assume every block entity is movable. Provide a compatibility mechanism f
 ---
 
 ## Implement configurable adhesion
-
 Each block should have five adhesion modes.
 
 **1. VANILLA**
@@ -678,10 +569,17 @@ After implementation, report:
 
 Do not silently leave a feature partially implemented while describing it as complete.
 
-**Overall design principle:**
-
-Extend vanilla piston movement without unnecessarily replacing vanilla systems. Blocks in the same movement group should be able to validate their survival against their group's intended destination arrangement, while block entities, multiblock structures, scheduled ticks, and redstone behavior remain predictable and compatible.
 
 1. Set up environment ready to build and create the requested menus as the template for future intended features. Then add the functionality related to making blocks configurable and block entities movable such as setting up config files and making the movable and tick transfer features working. Have menus and sliders ready for future progress.
 2. Focus on finishing the other simple features in the menu and work on the piston push group block survival fixes and multiblock fast landing.
 3. Focus on finishing adhesion settings
+
+**Overall design principle:**
+
+Extend vanilla piston movement without unnecessarily replacing vanilla systems. Blocks in the same movement group should be able to validate their survival against their group's intended destination arrangement, while block entities, multiblock structures, scheduled ticks, and redstone behavior remain predictable and compatible.
+
+## Common bugs:
+We assumed an ordinary Java interface could safely live inside the same package as Mixin classes. Mixin restricts normal classloading from packages designated for Mixins, so Minecraft rejected the interface when other code tried to reference it.
+We assumed Minecraft 26.3's PistonMovingBlockEntity.finalTick() contained a Level.setBlock() invocation at the expected injection point. The actual method bytecode did not contain a matching invocation at that location, so Mixin found zero targets and aborted startup.
+We assumed the same Level.setBlock() invocation would be available for MixinExtras to wrap inside finalTick(). The transformed method did not expose that invocation as expected, so MixinExtras could not install the wrapper.
+The recurring issue is that we were making assumptions about Minecraft's internal bytecode rather than verifying the actual 26.3 implementation before writing injection points. We should inspect the target methods in the exact Minecraft version and mappings we're building against before choosing Mixin injection strategies.
