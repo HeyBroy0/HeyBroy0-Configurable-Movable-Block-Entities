@@ -5,7 +5,7 @@ if %ERRORLEVEL% EQU 0 (
     gradle %*
     exit /b %ERRORLEVEL%
 )
-set "GRADLE_VERSION=9.7.1"
+set "GRADLE_VERSION=9.8.0"
 if not defined GRADLE_USER_HOME set "GRADLE_USER_HOME=%USERPROFILE%\.gradle"
 set "DIST_DIR=%GRADLE_USER_HOME%\wrapper\dists\gradle-%GRADLE_VERSION%-bin\cmbe-bootstrap"
 set "GRADLE_BIN=%DIST_DIR%\gradle-%GRADLE_VERSION%\bin\gradle.bat"
