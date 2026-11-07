@@ -10,7 +10,7 @@ This branch is the first implementation milestone for Minecraft 26.3 / Fabric. T
 - Dark configuration screen, registry-ID/display-name search, keyboard suggestion navigation, changed-block list, Focus/Revert actions, and a configurable keyboard shortcut.
 - Mod Menu config-screen integration.
 - Initial piston movement policy hooks for configured immovable and movable blocks, plus breakable-block handling in the structure resolver.
-- Exact-rational push-cost accounting for blocks explicitly configured as movable. Duplicate positions are counted once; vanilla movement keeps vanilla push-limit behavior.
+- Exact-rational post-resolution push-cost accounting. Duplicate positions are counted once; MOVABLE blocks use their configured fractional cost and VANILLA blocks still consume one full slot in mixed operations. The vanilla resolver's hard 12-position cap is still in place, so this accounting does not yet permit a piston to move more than 12 physical blocks.
 
 ## Deliberately incomplete runtime work
 

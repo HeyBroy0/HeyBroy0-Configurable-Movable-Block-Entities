@@ -14,9 +14,10 @@ import java.util.Set;
 /**
  * Calculates the custom cost as an exact rational number.
  *
- * A denominator of N means one physical block consumes 1/N of a vanilla
- * push slot. BigInteger avoids floating-point rounding changing a 12-block
- * boundary decision.
+ * A denominator of N means one MOVABLE physical block consumes 1/N of a
+ * vanilla push slot. VANILLA blocks consume one full slot, preserving their
+ * normal contribution in mixed structures. BigInteger avoids floating-point
+ * rounding changing a capacity-boundary decision.
  */
 public final class PushCostCalculator {
     private static final BigInteger VANILLA_CAPACITY = BigInteger.valueOf(12);
@@ -36,14 +37,16 @@ public final class PushCostCalculator {
 
             String blockId = BuiltInRegistries.BLOCK.getKey(level.getBlockState(position).getBlock()).toString();
             BlockSettings settings = ConfigManager.get(blockId);
-            if (settings.movement != BlockSettings.MovementMode.MOVABLE) {
-                // Vanilla blocks retain vanilla push-limit accounting.
-                continue;
+            BigInteger blockNumerator = BigInteger.ONE;
+            BigInteger blockDenominator = BigInteger.ONE;
+
+            if (settings.movement == BlockSettings.MovementMode.MOVABLE) {
+                blockDenominator = BigInteger.valueOf(settings.pushCostDenominator);
             }
 
-            BigInteger nextDenominator = BigInteger.valueOf(settings.pushCostDenominator);
-            numerator = numerator.multiply(nextDenominator).add(denominator);
-            denominator = denominator.multiply(nextDenominator);
+            numerator = numerator.multiply(blockDenominator)
+                .add(blockNumerator.multiply(denominator));
+            denominator = denominator.multiply(blockDenominator);
 
             BigInteger gcd = numerator.gcd(denominator);
             numerator = numerator.divide(gcd);
