@@ -375,44 +375,45 @@ Use safe file-writing practices, such as writing to a temporary file before repl
 
 ---
 
-## Analysis lifecycle and performance
+## Analysis Lifecycle and Performance
 
-Analysis should happen only when necessary.
+Block analysis should be performed outside normal gameplay and its results cached for runtime use.
 
-Initial analysis must happen after all installed mods have completed block registration.
+### When analysis runs
+- Run the initial analysis only after all installed mods have registered their blocks.
+- Complete the analysis before the player enters a world. Preferably, perform it incrementally at the title screen.
+- Reanalyze only when necessary. Avoid repeating the full analysis on every startup.
 
-The analysis should be completed before entering a world, preferably incrementally at the title screen.
-
-Use invalidation information including:
+### When cached results become invalid
+Each cached result must record enough information to determine whether it is still valid:
 - Minecraft version.
 - Mod IDs and versions.
 - Block registry identifiers.
-- Block-state property definitions and possible values.
-- Analysis schema/version.
+- Block-state properties and their possible values.
+- Analysis schema or algorithm version.
 
-Only reanalyze affected blocks where practical.
+Reanalyze only blocks affected by changes where practical. Invalidate results when the Minecraft version or analysis algorithm changes in a way that makes existing results incompatible.
 
-If the Minecraft version or analysis algorithm changes incompatibly, invalidate the relevant results.
+### What analysis should provide
+Cache the information required by the runtime adhesion resolver so that ordinary adhesion checks are inexpensive.
 
-Do not:
-- Enumerate block properties during piston movement.
-- Recalculate shapes during piston movement.
-- Perform full registry scans during normal gameplay.
-- Perform unnecessary analysis on every startup.
-- Modify player configuration during cache regeneration except for the controlled initial/default import described above.
+### Runtime and thread-safety requirements
+Do not perform expensive analysis during piston movement or ordinary gameplay. In particular:
+- Do not enumerate block-state properties during piston movement.
+- Do not recalculate block shapes during piston movement.
+- Do not scan the entire block registry during normal gameplay.
 
-Cache the results needed by the runtime adhesion resolver so ordinary adhesion checks are inexpensive.
+Be cautious with modded block methods that depend on a world, position, or collision context. Do not call potentially world-dependent shape methods on background threads unless their thread-safety is known.
 
-Be careful with modded block methods that require a world, position, or collision context. Do not execute arbitrary world-dependent shape methods on background threads without establishing that they are safe.
+### Unsupported or context-dependent geometry
+Some blocks cannot be analyzed reliably using block-state information alone. Support these blocks through custom adapters or provide a documented fallback behavior.
 
-For blocks whose geometry cannot be analyzed reliably from their block state, provide a custom adapter or a documented fallback.
-
+### Configuration safety
+Cache generation must not modify player configuration. The only exception is a controlled initial/default import, which should happen as a separate, explicitly defined operation.
 ---
 
 ## Advanced adhesion editor
-
 The Advanced mode Configure button should open a dedicated editor.
-
 Allow the player to:
 
 - Select the geometry source.
@@ -442,7 +443,7 @@ Keep this editor understandable. Do not expose irrelevant technical block proper
 
 ---
 
-## ompatibility and mod developer support
+## Compatibility and mod developer support
 
 Provide limited, useful extension points for other mods.
 
@@ -463,7 +464,7 @@ Avoid hardcoding mod-specific behavior unless it is required for a known compati
 
 ## Testing and regression protection
 
-Test progressively instead of implementing everything simultaneously.
+Test progressively instead of implementing everything simultaneously. I will run a Minecraft instances and tell you observations after performing some tests.
 
 ### Movement tests
 - Normal movable block.
@@ -520,12 +521,9 @@ Do not claim compatibility solely because the project compiles.
 ---
 
 ##  GitHub Actions and build requirements
-
 Make the repository buildable through GitHub Actions.
-
 Create or update workflows to:
-
-1. Run on pushes and pull requests.
+1. Run on pushes and commits.
 2. Set up the Java version required by the verified Minecraft 26.3 build environment.
 3. Set up Gradle using the repository's Gradle wrapper.
 4. Cache Gradle dependencies.
@@ -534,9 +532,7 @@ Create or update workflows to:
 7. Upload the resulting JAR as a workflow artifact.
 
 Do not invent dependency versions, Maven coordinates, Java versions, or loader requirements.
-
 Verify all of them against the actual project and available 26.3 Fabric releases.
-
 Do not require release secrets for normal CI builds.
 
 ---
@@ -570,9 +566,10 @@ After implementation, report:
 Do not silently leave a feature partially implemented while describing it as complete.
 
 
-1. Set up environment ready to build and create the requested menus as the template for future intended features. Then add the functionality related to making blocks configurable and block entities movable such as setting up config files and making the movable and tick transfer features working. Have menus and sliders ready for future progress.
-2. Focus on finishing the other simple features in the menu and work on the piston push group block survival fixes and multiblock fast landing.
-3. Focus on finishing adhesion settings
+1. Set up environment ready to build and create the requested menus as the template for future intended features and setting up config files. 
+2. Add the functionality related to making blocks configurable and block entities movable and make the movable and tick transfer features working.
+3. Focus on finishing the other simple features in the menu and work on the piston push group block survival fixes and multiblock fast landing.
+4. Focus on finishing adhesion settings
 
 **Overall design principle:**
 
