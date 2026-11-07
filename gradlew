@@ -2,12 +2,12 @@
 set -eu
 
 # GitHub Actions supplies Gradle through setup-gradle. The fallback bootstraps
-# the pinned distribution for local environments without a Gradle install.
+# the pinned distribution for local environments without a Gradle installation.
 if command -v gradle >/dev/null 2>&1; then
     exec gradle "$@"
 fi
 
-GRADLE_VERSION="9.6"
+GRADLE_VERSION="9.6.0"
 GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
 DIST_DIR="$GRADLE_USER_HOME/wrapper/dists/gradle-$GRADLE_VERSION-bin/cmbe-bootstrap"
 GRADLE_BIN="$DIST_DIR/gradle-$GRADLE_VERSION/bin/gradle"
