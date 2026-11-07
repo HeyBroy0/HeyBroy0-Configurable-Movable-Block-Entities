@@ -1,0 +1,36 @@
+# Implementation status
+
+This branch is the first implementation milestone for Minecraft 26.3 / Fabric. The adhesion feature family has deliberately been excluded: there are no adhesion settings, controls, screens, caches, or runtime hooks in this branch.
+
+## Included in this milestone
+
+- Fabric Loom 1.19.4 project targeting Minecraft 26.3, Java 25, and Gradle 9.8.0.
+- Fabric metadata, client/common entrypoints, Mixin configuration, and a build workflow.
+- Atomic JSON persistence at `config/cmbe/settings.json`.
+- Dark configuration screen, registry-ID/display-name search, keyboard suggestion navigation, changed-block list, Focus/Revert actions, and a configurable keyboard shortcut.
+- Mod Menu config-screen integration.
+- Initial piston movement policy hooks for configured immovable and movable blocks, plus breakable-block handling in the structure resolver.
+- Exact-rational post-resolution push-cost accounting. Duplicate positions are counted once; MOVABLE blocks use their configured fractional cost and VANILLA blocks still consume one full slot in mixed operations. The vanilla resolver's hard 12-position cap is still in place, so this accounting does not yet permit a piston to move more than 12 physical blocks.
+
+## Current reported piston issues
+
+The latest main-branch `Test logs.txt` reports that configured MOVABLE blocks are pushable but not pulled by sticky pistons, and that a normally breakable block may still be destroyed when another block moves into its position. These are the first runtime regressions to resolve. The current report does not include exact block IDs or reproduction layouts; see [docs/TESTING.md](docs/TESTING.md).
+
+## Deliberately incomplete runtime work
+
+These settings/UI values are persisted, but their runtime behavior is not implemented in this milestone:
+
+- Scheduled-tick transfer and duplication.
+- Block-entity serialization/restoration. To avoid inventory or machine-data loss, a block configured as movable is not admitted to the custom movement path while it has a block entity.
+- Per-operation piston movement groups and destination-aware survival checks.
+- Structure adapters and coordinated multiblock landing.
+- Full compatibility adapters for third-party block entities and modded structures.
+- Push-cost integration with the resolver's physical 12-block limit. The current post-resolution cost check cannot increase that hard cap.
+
+The next development pass must implement these against the exact 26.3 mapped bytecode and validate them in a running game. In particular, it must not assume that an older Minecraft injection point remains present.
+
+## Build verification
+
+The GitHub Actions workflow uses Java 25 and Gradle 9.8.0. The build for commit `c805656f072e6ba843f67da72a4cccb382d811b0` completed successfully and uploaded the `cmbe-fabric-26.3` artifact (run `42331591916`). This verifies compilation and packaging only; it does not validate piston behavior in a running game.
+
+The earlier Microsoft OpenJDK G1 fatal error is not present in the latest test log and is not currently being investigated. If it recurs, preserve the fatal-error file separately from Minecraft's `latest.log` and crash report.
