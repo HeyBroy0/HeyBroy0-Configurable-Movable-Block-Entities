@@ -565,12 +565,6 @@ After implementation, report:
 
 Do not silently leave a feature partially implemented while describing it as complete.
 
-
-1. Set up environment ready to build and create the requested menus as the template for future intended features and setting up config files. 
-2. Add the functionality related to making blocks configurable and block entities movable and make the movable and tick transfer features working.
-3. Focus on finishing the other simple features in the menu and work on the piston push group block survival fixes and multiblock fast landing.
-4. Focus on finishing adhesion settings
-
 **Overall design principle:**
 
 Extend vanilla piston movement without unnecessarily replacing vanilla systems. Blocks in the same movement group should be able to validate their survival against their group's intended destination arrangement, while block entities, multiblock structures, scheduled ticks, and redstone behavior remain predictable and compatible.
