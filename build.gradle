@@ -1,5 +1,5 @@
 plugins {
-    id "fabric-loom" version "${loom_version}"
+    id "net.fabricmc.fabric-loom" version "${loom_version}"
     id "maven-publish"
 }
 
@@ -22,19 +22,23 @@ repositories {
     }
 }
 
-dependencies {
-    minecraft "com.mojang:minecraft:${minecraft_version}"
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
-    modImplementation "com.terraformersmc:modmenu:${modmenu_version}"
-    modImplementation "curse.maven:frozenlib-709773:${frozenlib_file_id}"
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "cmbe" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
 }
 
-loom {
-    mixin {
-        defaultRefmapName = "cmbe.refmap.json"
-    }
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    implementation "curse.maven:frozenlib-709773:${frozenlib_file_id}"
+    clientImplementation "com.terraformersmc:modmenu:${modmenu_version}"
 }
 
 processResources {
@@ -46,12 +50,11 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
-    options.release = Integer.parseInt(project.java_version)
+    options.release = 25
 }
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.java_version))
-    }
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
     withSourcesJar()
 }
