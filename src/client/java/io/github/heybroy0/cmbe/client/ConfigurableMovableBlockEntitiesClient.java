@@ -1,13 +1,12 @@
 package io.github.heybroy0.cmbe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.heybroy0.cmbe.ConfigurableMovableBlockEntities;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
-import com.mojang.blaze3d.platform.InputConstants;
 
 public final class ConfigurableMovableBlockEntitiesClient implements ClientModInitializer {
     private static KeyMapping openConfig;
@@ -26,7 +25,7 @@ public final class ConfigurableMovableBlockEntitiesClient implements ClientModIn
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openConfig.consumeClick()) {
-                Minecraft.getInstance().setScreen(new MovableBlockConfigScreen(client.screen));
+                client.gui.setScreen(new MovableBlockConfigScreen(client.gui.screen()));
             }
         });
     }
