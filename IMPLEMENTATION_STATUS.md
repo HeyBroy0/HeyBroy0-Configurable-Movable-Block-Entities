@@ -4,7 +4,7 @@ This branch is the first implementation milestone for Minecraft 26.3 / Fabric. T
 
 ## Included in this milestone
 
-- Fabric/Loom Gradle project targeting Minecraft 26.3 and Java 25.
+- Fabric Loom 1.19.4 project targeting Minecraft 26.3, Java 25, and Gradle 9.8.0.
 - Fabric metadata, client/common entrypoints, Mixin configuration, and a build workflow.
 - Atomic JSON persistence at `config/cmbe/settings.json`.
 - Dark configuration screen, registry-ID/display-name search, keyboard suggestion navigation, changed-block list, Focus/Revert actions, and a configurable keyboard shortcut.
@@ -26,4 +26,22 @@ The next development pass must implement these against the exact 26.3 mapped byt
 
 ## Build verification
 
-The GitHub Actions workflow uses Java 25 and Gradle 9.6 and uploads the built JAR. A successful source commit is not itself a successful game/build test; consult the workflow result for this branch before treating the artifact as validated.
+The GitHub Actions workflow uses Java 25 and Gradle 9.8.0. The build for commit `c805656f072e6ba843f67da72a4cccb382d811b0` completed successfully and uploaded the `cmbe-fabric-26.3` artifact (run `42331591916`). This verifies compilation and packaging only; it does not validate piston behavior in a running game.
+
+
+## Main-branch test-log finding
+
+The main-branch `Test logs.txt` reports a native JVM fatal error on Windows 11 with Microsoft OpenJDK 25.0.1+8. Its assertion is:
+
+```
+Internal Error (g1HeapRegionManager.cpp:55)
+master free list MT safety protocol at a safepoint
+```
+
+This exact failure signature is documented in Microsoft OpenJDK issue [#677](https://github.com/microsoft/openjdk/issues/677). Microsoft identified a timing race in its G1 time-based heap-uncommit feature and documented this workaround for affected runtimes:
+
+```
+-XX:+UnlockDiagnosticVMOptions -XX:-G1UseTimeBasedHeapSizing
+```
+
+This is a JVM startup option, not a mod setting. The mod cannot safely set it from Java code. See [docs/TESTING.md](docs/TESTING.md) for the test-log analysis and retest procedure. The log does not show a CMBE exception, failed Mixin injection, or an application-level Java stack trace, so it does not justify changing piston hooks.

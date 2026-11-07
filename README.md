@@ -574,3 +574,8 @@ We assumed an ordinary Java interface could safely live inside the same package 
 We assumed Minecraft 26.3's PistonMovingBlockEntity.finalTick() contained a Level.setBlock() invocation at the expected injection point. The actual method bytecode did not contain a matching invocation at that location, so Mixin found zero targets and aborted startup.
 We assumed the same Level.setBlock() invocation would be available for MixinExtras to wrap inside finalTick(). The transformed method did not expose that invocation as expected, so MixinExtras could not install the wrapper.
 The recurring issue is that we were making assumptions about Minecraft's internal bytecode rather than verifying the actual 26.3 implementation before writing injection points. We should inspect the target methods in the exact Minecraft version and mappings we're building against before choosing Mixin injection strategies.
+
+
+## Runtime testing notes
+
+See [docs/TESTING.md](docs/TESTING.md) for the analysis of the supplied main-branch JVM crash log and the documented workaround for Microsoft OpenJDK 25.0.1.
