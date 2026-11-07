@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/** Interactive GUI prototype. Settings are saved for preview only and never affect piston behavior. */
 public final class MovableBlockConfigScreen extends Screen {
     private enum Page { MAIN, CHANGED }
 
@@ -35,7 +36,7 @@ public final class MovableBlockConfigScreen extends Screen {
     private String statusText = "";
 
     public MovableBlockConfigScreen(Screen parent) {
-        super(Component.literal("Configurable Movable Block Entities"));
+        super(Component.literal("CMBE GUI Preview"));
         this.parent = parent;
     }
 
@@ -60,7 +61,7 @@ public final class MovableBlockConfigScreen extends Screen {
         searchBox.setResponder(this::updateSuggestions);
         addRenderableWidget(searchBox);
 
-        addRenderableWidget(Button.builder(Component.literal("Changed Blocks"), button -> {
+        addRenderableWidget(Button.builder(Component.literal("Saved Previews"), button -> {
             page = Page.CHANGED;
             changedScroll = 0;
             rebuild();
@@ -85,7 +86,7 @@ public final class MovableBlockConfigScreen extends Screen {
             costBox.setValue(Integer.toString(working.pushCostDenominator));
             addRenderableWidget(costBox);
 
-            addRenderableWidget(Button.builder(Component.literal("Save Block"), button -> saveSelectedBlock())
+            addRenderableWidget(Button.builder(Component.literal("Save Preview"), button -> saveSelectedBlock())
                 .bounds(left + 122, top + 205, 100, 20).build());
         }
 
@@ -114,7 +115,7 @@ public final class MovableBlockConfigScreen extends Screen {
             String id = changedIds.get(changedScroll + i);
             int rowY = top + 40 + i * 25;
 
-            addRenderableWidget(Button.builder(Component.literal("Focus"), button -> {
+            addRenderableWidget(Button.builder(Component.literal("Edit"), button -> {
                 page = Page.MAIN;
                 selectedBlockId = id;
                 searchText = id;
@@ -123,9 +124,9 @@ public final class MovableBlockConfigScreen extends Screen {
                 rebuild();
             }).bounds(left + 270, rowY, 48, 19).build());
 
-            addRenderableWidget(Button.builder(Component.literal("Revert"), button -> {
+            addRenderableWidget(Button.builder(Component.literal("Reset"), button -> {
                 ConfigManager.revert(id);
-                statusText = "Reverted " + id;
+                statusText = "Reset preview settings for " + id;
                 rebuild();
             }).bounds(left + 324, rowY, 54, 19).build());
         }
@@ -210,7 +211,7 @@ public final class MovableBlockConfigScreen extends Screen {
 
             working.pushCostDenominator = denominator;
             ConfigManager.set(selectedBlockId, working);
-            statusText = "Saved " + selectedBlockId;
+            statusText = "Saved preview settings for " + selectedBlockId;
         } catch (NumberFormatException exception) {
             statusText = "Push-cost denominator must be a positive integer.";
         }
@@ -278,7 +279,7 @@ public final class MovableBlockConfigScreen extends Screen {
         graphics.fill(left, top, left + 390, top + 2, 0xFF657180);
 
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
-        graphics.text(font, "Configurable Movable Block Entities", width / 2 - 100,
+        graphics.text(font, "CMBE GUI Preview — no piston behavior", width / 2 - 120,
             top + 12, 0xFFF1F3F5, true);
 
         if (page == Page.MAIN) {
@@ -288,7 +289,7 @@ public final class MovableBlockConfigScreen extends Screen {
                     left + 12, top + 143, 0xFFF1F3F5, true);
                 graphics.text(font, "Cost = 1 / denominator (positive integer)",
                     left + 122, top + 210, 0xFFCFD5DD, true);
-                graphics.text(font, "Tick modes are stored; runtime tick handling is pending.",
+                graphics.text(font, "UI preview only: settings do not affect piston behavior.",
                     left + 12, top + 238, 0xFFFFD27A, true);
             }
 
@@ -307,7 +308,7 @@ public final class MovableBlockConfigScreen extends Screen {
                 }
             }
         } else {
-            graphics.text(font, "Changed blocks", left + 12, top + 27, 0xFFCFD5DD, true);
+            graphics.text(font, "Saved preview settings", left + 12, top + 27, 0xFFCFD5DD, true);
             int visible = Math.min(8, Math.max(0, changedIds.size() - changedScroll));
             for (int i = 0; i < visible; i++) {
                 String id = changedIds.get(changedScroll + i);
@@ -315,7 +316,7 @@ public final class MovableBlockConfigScreen extends Screen {
                     left + 12, top + 43 + i * 25, 0xFFE4E8ED, true);
             }
             if (changedIds.isEmpty()) {
-                graphics.text(font, "No blocks have custom settings.", left + 12,
+                graphics.text(font, "No preview settings have been saved.", left + 12,
                     top + 56, 0xFFCFD5DD, true);
             }
         }

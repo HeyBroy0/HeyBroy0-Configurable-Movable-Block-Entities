@@ -1,3 +1,5 @@
+> **GUI-only prototype branch:** this branch contains the configuration screen, hotkey, Mod Menu entry, and preview-state controls only. The controls can be used to test the interface, but saved values do **not** change piston behavior or the game world. Piston mixins and movement logic are deliberately absent here. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+
 # HeyBroy0 – Configurable Movable Block Entities
 
 ## Project objective

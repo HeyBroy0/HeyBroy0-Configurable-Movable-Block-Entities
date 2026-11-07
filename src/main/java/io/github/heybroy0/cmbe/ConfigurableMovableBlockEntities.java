@@ -12,6 +12,6 @@ public final class ConfigurableMovableBlockEntities implements ModInitializer {
     @Override
     public void onInitialize() {
         ConfigManager.load();
-        LOGGER.info("Configurable Movable Block Entities initialized.");
+        LOGGER.info("CMBE GUI Preview initialized; piston behavior is not installed.");
     }
 }

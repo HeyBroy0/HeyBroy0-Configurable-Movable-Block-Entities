@@ -48,7 +48,7 @@ public final class ConfigManager {
             config.blocks = sanitized;
             save();
         } catch (Exception exception) {
-            ConfigurableMovableBlockEntities.LOGGER.error("Could not load block settings; defaults will be used.", exception);
+            ConfigurableMovableBlockEntities.LOGGER.error("Could not load GUI preview settings; defaults will be used.", exception);
             config = new ConfigFile();
         }
     }
@@ -100,7 +100,7 @@ public final class ConfigManager {
                 Files.move(temporary, settingsPath, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException exception) {
-            ConfigurableMovableBlockEntities.LOGGER.error("Could not save block settings to {}", settingsPath, exception);
+            ConfigurableMovableBlockEntities.LOGGER.error("Could not save GUI preview settings to {}", settingsPath, exception);
         }
     }
 
