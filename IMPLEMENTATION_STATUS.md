@@ -12,6 +12,10 @@ This branch is the first implementation milestone for Minecraft 26.3 / Fabric. T
 - Initial piston movement policy hooks for configured immovable and movable blocks, plus breakable-block handling in the structure resolver.
 - Exact-rational post-resolution push-cost accounting. Duplicate positions are counted once; MOVABLE blocks use their configured fractional cost and VANILLA blocks still consume one full slot in mixed operations. The vanilla resolver's hard 12-position cap is still in place, so this accounting does not yet permit a piston to move more than 12 physical blocks.
 
+## Current reported piston issues
+
+The latest main-branch `Test logs.txt` reports that configured MOVABLE blocks are pushable but not pulled by sticky pistons, and that a normally breakable block may still be destroyed when another block moves into its position. These are the first runtime regressions to resolve. The current report does not include exact block IDs or reproduction layouts; see [docs/TESTING.md](docs/TESTING.md).
+
 ## Deliberately incomplete runtime work
 
 These settings/UI values are persisted, but their runtime behavior is not implemented in this milestone:
@@ -21,6 +25,7 @@ These settings/UI values are persisted, but their runtime behavior is not implem
 - Per-operation piston movement groups and destination-aware survival checks.
 - Structure adapters and coordinated multiblock landing.
 - Full compatibility adapters for third-party block entities and modded structures.
+- Push-cost integration with the resolver's physical 12-block limit. The current post-resolution cost check cannot increase that hard cap.
 
 The next development pass must implement these against the exact 26.3 mapped bytecode and validate them in a running game. In particular, it must not assume that an older Minecraft injection point remains present.
 
@@ -28,20 +33,4 @@ The next development pass must implement these against the exact 26.3 mapped byt
 
 The GitHub Actions workflow uses Java 25 and Gradle 9.8.0. The build for commit `c805656f072e6ba843f67da72a4cccb382d811b0` completed successfully and uploaded the `cmbe-fabric-26.3` artifact (run `42331591916`). This verifies compilation and packaging only; it does not validate piston behavior in a running game.
 
-
-## Main-branch test-log finding
-
-The main-branch `Test logs.txt` reports a native JVM fatal error on Windows 11 with Microsoft OpenJDK 25.0.1+8. Its assertion is:
-
-```
-Internal Error (g1HeapRegionManager.cpp:55)
-master free list MT safety protocol at a safepoint
-```
-
-This exact failure signature is documented in Microsoft OpenJDK issue [#677](https://github.com/microsoft/openjdk/issues/677). Microsoft identified a timing race in its G1 time-based heap-uncommit feature and documented this workaround for affected runtimes:
-
-```
--XX:+UnlockDiagnosticVMOptions -XX:-G1UseTimeBasedHeapSizing
-```
-
-This is a JVM startup option, not a mod setting. The mod cannot safely set it from Java code. See [docs/TESTING.md](docs/TESTING.md) for the test-log analysis and retest procedure. The log does not show a CMBE exception, failed Mixin injection, or an application-level Java stack trace, so it does not justify changing piston hooks.
+The earlier Microsoft OpenJDK G1 fatal error is not present in the latest test log and is not currently being investigated. If it recurs, preserve the fatal-error file separately from Minecraft's `latest.log` and crash report.
