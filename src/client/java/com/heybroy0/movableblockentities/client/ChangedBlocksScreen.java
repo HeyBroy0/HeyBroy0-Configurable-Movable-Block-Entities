@@ -1109,7 +1109,9 @@ public final class ChangedBlocksScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (event.key() == 41) { // SDL scancode for Escape
-            minecraft.gui.setScreen(new MainConfigScreen(returnBlock));
+            boolean preserveFocus = !returnFocusEntryIds.isEmpty();
+            minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
+                    null, preserveFocus ? returnFocusEntryIds : List.of(), -1));
             return true;
         }
         return super.keyPressed(event);
