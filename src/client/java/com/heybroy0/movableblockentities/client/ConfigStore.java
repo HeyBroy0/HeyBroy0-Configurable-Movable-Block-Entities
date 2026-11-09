@@ -552,6 +552,18 @@ public final class ConfigStore {
 
     /** Materializes and moves one exact occurrence to the top of its own directory. */
     /** Moves the focused entry to the front of its current directory without changing its children. */
+    /** Apply a focused container's edited settings to every contained block occurrence. */
+    public static synchronized void applyConfigToEntries(BlockConfig source, List<String> entryIds) {
+        load();
+        if (source == null || entryIds == null || entryIds.isEmpty()) return;
+        for (String id : entryIds) {
+            TreeEntry entry = TREE_ENTRIES.get(id);
+            if (entry == null || entry.type() != TreeEntryType.BLOCK) continue;
+            BLOCKS.put(id, source.copyFor(entry.value()));
+        }
+        save();
+    }
+
     public static synchronized TreeEntry focusTreeEntry(String entryId) {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
@@ -618,6 +630,9 @@ public final class ConfigStore {
         }
 
         TreeEntry source = TREE_ENTRIES.get(sourceSnapshot.id());
+        TreeEntry destinationContainer = destinationParent == null ? null : TREE_ENTRIES.get(destinationParent);
+        if (destinationContainer != null && destinationContainer.type() == TreeEntryType.SELECTOR
+                && !Objects.equals(sourceSnapshot.parentId(), destinationParent)) return false;
         TreeEntry sourceParent = sourceSnapshot.parentId() == null
                 ? null : TREE_ENTRIES.get(sourceSnapshot.parentId());
         boolean selectorMember = sourceSnapshot.id().startsWith("tagblock|")
