@@ -246,7 +246,9 @@ public final class ChangedBlocksScreen extends Screen {
     private void createFolder() {
         String name = entryDraft.trim();
         List<String> ids = new ArrayList<>(selectedItems.keySet());
-        String destinationParent = bulkMode ? bulkParentId : activeFolderParent();
+        // A folder created around a selection is always a new root folder. The selected
+        // top-level entries are moved into it; descendants of selected containers stay nested.
+        String destinationParent = ids.isEmpty() ? activeFolderParent() : null;
         ConfigStore.createFolder(name, destinationParent, ids);
         // Folder creation relocates the selected entries; preserve their selection identity.
         entryDraft = "";
