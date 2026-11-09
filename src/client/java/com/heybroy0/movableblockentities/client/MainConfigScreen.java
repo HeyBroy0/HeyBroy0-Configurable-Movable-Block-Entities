@@ -472,20 +472,15 @@ public final class MainConfigScreen extends Screen {
         selectedBlockId = id;
         lastSelectedBlockId = id;
 
-        ConfigStore.TreeEntry selectedOccurrence = null;
         // A completed search always ends the previous focus snapshot.
         clearFocusScope();
 
-        if (selectedOccurrence == null) {
-            ConfigStore.TreeEntry topmost = ConfigStore.findTopmostBlockEntry(id);
-            if (topmost != null) {
-                ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(topmost.id(), id);
-                selectedEntryId = touched == null ? topmost.id() : touched.id();
-            } else {
-                selectedEntryId = "block|" + id;
-            }
+        ConfigStore.TreeEntry topmost = ConfigStore.findTopmostBlockEntry(id);
+        if (topmost != null) {
+            ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(topmost.id(), id);
+            selectedEntryId = touched == null ? topmost.id() : touched.id();
         } else {
-            selectedEntryId = selectedOccurrence.id();
+            selectedEntryId = "block|" + id;
         }
         lastSelectedEntryId = selectedEntryId;
         config = ConfigStore.get(id, selectedEntryId);
@@ -727,8 +722,6 @@ public final class MainConfigScreen extends Screen {
     }
 
     private void renderButtonLabels(GuiGraphicsExtractor graphics) {
-        drawButtonLabel(graphics, previousFocusButton, "‹");
-        drawButtonLabel(graphics, nextFocusButton, "›");
         drawButtonLabel(graphics, movementButton, "‹  " + pretty(config.movement.name()) + "  ›");
         drawButtonLabel(graphics, tickButton, "‹  " + pretty(config.scheduledTicks.name()) + "  ›");
         drawButtonLabel(graphics, adhesionButton, "‹  " + pretty(config.adhesion.name()) + "  ›");
