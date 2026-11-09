@@ -48,6 +48,7 @@ public final class ConfigStore {
     private static String lastHistoryFingerprint;
     private static boolean replayingHistory;
     private static boolean loaded;
+    private static boolean blockTagsAvailable;
 
     private ConfigStore() {}
 
@@ -56,7 +57,6 @@ public final class ConfigStore {
         loaded = true;
         if (!Files.exists(FILE)) {
             resetHistoryBaseline();
-            rebuildRuntimeCache();
             return;
         }
 
@@ -125,9 +125,8 @@ public final class ConfigStore {
             }
             resetHistoryBaseline();
         }
-        // Export after load/recovery. Selector members are refreshed again after the
-        // client receives the active world's tag data.
-        rebuildRuntimeCache();
+        // Runtime cache export is deferred until JOIN, when registry tags are bound.
+        // Loading the saved hierarchy must also work from the title screen.
     }
 
     /**
@@ -260,6 +259,7 @@ public final class ConfigStore {
      */
     public static synchronized void rebuildRuntimeCache() {
         load();
+        if (!blockTagsAvailable) return;
         Map<String, RuntimeConfigCache.BlockSettings> effective = new LinkedHashMap<>();
         Deque<TreeEntry> pending = new ArrayDeque<>();
         List<TreeEntry> roots = rootEntries();
@@ -306,8 +306,15 @@ public final class ConfigStore {
         }
     }
 
+    /** Marks registry tag access safe after the client has joined and received tag data. */
+    public static synchronized void onBlockTagsAvailable() {
+        blockTagsAvailable = true;
+        rebuildRuntimeCache();
+    }
+
     /** Returns the active block-tag ids, matched against their full namespaced id. */
     public static synchronized List<String> blockTagIds(String filter) {
+        if (!blockTagsAvailable) return List.of();
         String query = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
         return BuiltInRegistries.BLOCK.getTags()
                 .map(tag -> tag.key().location().toString())
@@ -317,6 +324,7 @@ public final class ConfigStore {
     }
 
     public static synchronized boolean isBlockTag(String tagId) {
+        if (!blockTagsAvailable) return false;
         String normalized = normalizeTagId(tagId);
         if (normalized == null) return false;
         return BuiltInRegistries.BLOCK.getTags()
@@ -325,6 +333,7 @@ public final class ConfigStore {
 
     /** The current block members of a selector. Membership is resolved from loaded registry tags. */
     public static synchronized List<String> blockTagMembers(String tagId) {
+        if (!blockTagsAvailable) return List.of();
         String normalized = normalizeTagId(tagId);
         if (normalized == null) return List.of();
         List<String> result = new ArrayList<>();
