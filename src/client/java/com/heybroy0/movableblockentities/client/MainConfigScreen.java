@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import static com.heybroy0.movableblockentities.client.ConfigStore.*;
 
@@ -162,8 +161,8 @@ public final class MainConfigScreen extends Screen {
         }
 
         List<BlockSuggestion> found = new ArrayList<>();
-        for (Map.Entry<Identifier, Block> entry : BuiltInRegistries.BLOCK.entrySet()) {
-            String id = entry.getKey().toString();
+        for (var entry : BuiltInRegistries.BLOCK.entrySet()) {
+            String id = entry.getKey().identifier().toString();
             String name = entry.getValue().getName().getString();
             String normalizedName = name.toLowerCase(Locale.ROOT);
             String path = entry.getKey().getPath().toLowerCase(Locale.ROOT);
