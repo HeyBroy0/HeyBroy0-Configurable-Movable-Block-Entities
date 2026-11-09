@@ -8,3 +8,4 @@ pluginManagement {
 
 rootProject.name = 'movable-block-entities-gui'
 
+include 'core'
