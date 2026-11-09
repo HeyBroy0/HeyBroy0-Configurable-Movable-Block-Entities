@@ -12,8 +12,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 
@@ -26,6 +28,14 @@ public final class MainConfigScreen extends Screen {
     private static final int SUGGESTION_ROW_HEIGHT = 18;
     private static final int MAX_VISIBLE_SUGGESTIONS = 7;
 
+    // Session-only search memory: a fresh game launch begins with an empty search.
+    private static String lastSearchValue = "";
+    private static String lastSelectedBlockId;
+
+    private final Deque<String> searchUndoHistory = new ArrayDeque<>();
+    private boolean applyingSearchUndo;
+    private String lastObservedSearchValue = "";
+
     private String selectedBlockId;
     private BlockConfig config;
     private EditBox searchBox;
@@ -36,15 +46,24 @@ public final class MainConfigScreen extends Screen {
     private Button configureButton;
     private List<BlockSuggestion> suggestions = List.of();
     private int suggestionIndex;
+    private int hoveredSuggestionIndex = -1;
     private int suggestionScrollOffset;
     private int left;
     private int top;
     private int searchY;
 
+    public MainConfigScreen() {
+        this(null);
+    }
+
     public MainConfigScreen(String selectedBlockId) {
         super(Component.literal("Configurable Movable Block Entities"));
         this.selectedBlockId = selectedBlockId == null || selectedBlockId.isBlank()
-                ? "minecraft:stone" : selectedBlockId;
+                ? (lastSelectedBlockId == null ? "minecraft:stone" : lastSelectedBlockId)
+                : selectedBlockId;
+        if (selectedBlockId != null && !selectedBlockId.isBlank()) {
+            lastSelectedBlockId = selectedBlockId;
+        }
         this.config = ConfigStore.get(this.selectedBlockId);
     }
 
@@ -60,8 +79,10 @@ public final class MainConfigScreen extends Screen {
         searchBox.setMaxLength(160);
         searchBox.setBordered(true);
         searchBox.setHint(Component.literal("minecraft:stone or a block name"));
-        searchBox.setValue(selectedBlockId);
-        searchBox.setResponder(this::refreshSuggestions);
+        searchBox.setValue(lastSearchValue);
+        lastObservedSearchValue = searchBox.getValue();
+        searchBox.setResponder(this::onSearchValueChanged);
+        refreshSuggestions(searchBox.getValue());
         addRenderableWidget(searchBox);
 
         int labelX = left + 22;
@@ -152,12 +173,40 @@ public final class MainConfigScreen extends Screen {
         return formatted.toString();
     }
 
+    private void onSearchValueChanged(String value) {
+        if (!applyingSearchUndo && !value.equals(lastObservedSearchValue)) {
+            searchUndoHistory.addLast(lastObservedSearchValue);
+            while (searchUndoHistory.size() > 64) {
+                searchUndoHistory.removeFirst();
+            }
+        }
+        lastObservedSearchValue = value;
+        lastSearchValue = value;
+        refreshSuggestions(value);
+    }
+
+    private void undoSearchValue() {
+        if (searchUndoHistory.isEmpty() || searchBox == null) return;
+        String previousValue = searchUndoHistory.removeLast();
+        applyingSearchUndo = true;
+        try {
+            searchBox.setValue(previousValue);
+            searchBox.setCursorPosition(previousValue.length());
+        } finally {
+            applyingSearchUndo = false;
+        }
+        lastObservedSearchValue = previousValue;
+        lastSearchValue = previousValue;
+    }
+
     private void refreshSuggestions(String value) {
         suggestionIndex = 0;
         String query = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         if (query.isEmpty()) {
             suggestions = List.of();
             suggestionScrollOffset = 0;
+            hoveredSuggestionIndex = -1;
+            suggestionIndex = 0;
             return;
         }
 
@@ -181,6 +230,7 @@ public final class MainConfigScreen extends Screen {
         suggestions = List.copyOf(found);
         suggestionScrollOffset = 0;
         suggestionIndex = 0;
+        hoveredSuggestionIndex = -1;
     }
 
     private boolean suggestionsOpen() {
@@ -193,20 +243,50 @@ public final class MainConfigScreen extends Screen {
     private void moveSuggestion(int direction, boolean wrap) {
         if (suggestions.isEmpty()) return;
 
+        hoveredSuggestionIndex = -1;
         if (wrap) {
             suggestionIndex = Math.floorMod(suggestionIndex + direction, suggestions.size());
         } else {
             suggestionIndex = Math.max(0, Math.min(suggestions.size() - 1, suggestionIndex + direction));
         }
+        keepSuggestionSelectionVisible();
+    }
 
+    private void keepSuggestionSelectionVisible() {
         if (suggestionIndex < suggestionScrollOffset) {
             suggestionScrollOffset = suggestionIndex;
         } else if (suggestionIndex >= suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS) {
             suggestionScrollOffset = suggestionIndex - MAX_VISIBLE_SUGGESTIONS + 1;
         }
-
         int maxOffset = Math.max(0, suggestions.size() - MAX_VISIBLE_SUGGESTIONS);
         suggestionScrollOffset = Math.max(0, Math.min(maxOffset, suggestionScrollOffset));
+    }
+
+    private int visibleSuggestionCount() {
+        return Math.min(MAX_VISIBLE_SUGGESTIONS,
+                Math.max(0, suggestions.size() - suggestionScrollOffset));
+    }
+
+    private void scrollSuggestionWindow(int direction) {
+        int maxOffset = Math.max(0, suggestions.size() - MAX_VISIBLE_SUGGESTIONS);
+        suggestionScrollOffset = Math.max(0, Math.min(maxOffset, suggestionScrollOffset + direction));
+        // Wheel scrolling only changes the viewport. The highlighted item is set by hover or keyboard.
+    }
+
+    private void updateSuggestionHover(double mouseX, double mouseY) {
+        hoveredSuggestionIndex = -1;
+        if (!suggestionsOpen()) return;
+
+        int visibleCount = visibleSuggestionCount();
+        boolean overPopup = mouseX >= popupX() && mouseX < popupX() + PANEL_WIDTH - 40
+                && mouseY >= popupY() && mouseY < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT;
+        if (!overPopup) return;
+
+        int row = (int) ((mouseY - popupY()) / SUGGESTION_ROW_HEIGHT);
+        int index = suggestionScrollOffset + row;
+        if (index >= suggestionScrollOffset && index < suggestionScrollOffset + visibleCount) {
+            hoveredSuggestionIndex = index;
+        }
     }
 
     private void chooseSuggestion(int index) {
@@ -231,10 +311,14 @@ public final class MainConfigScreen extends Screen {
 
     private void chooseBlock(String id) {
         selectedBlockId = id;
+        lastSelectedBlockId = id;
         config = ConfigStore.get(id);
         searchBox.setValue(id);
+        searchBox.setCursorPosition(id.length());
         searchBox.setFocused(false);
         suggestions = List.of();
+        suggestionScrollOffset = 0;
+        hoveredSuggestionIndex = -1;
         pushCostBox.setValue(Integer.toString(config.pushCost));
         refreshControlLabels();
     }
@@ -247,27 +331,40 @@ public final class MainConfigScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (searchBox != null && searchBox.isFocused() && suggestionsOpen()) {
-            if (event.key() == InputConstants.KEY_TAB) {
-                moveSuggestion(event.hasShiftDown() ? -1 : 1, true);
+        if (searchBox != null && searchBox.isFocused()) {
+            if (event.hasControlDown()) {
+                if (event.key() == InputConstants.KEY_Z) {
+                    undoSearchValue();
+                    return true;
+                }
+                if (event.isSelectAll() || event.isCopy() || event.isCut() || event.isPaste()) {
+                    // Delegate clipboard shortcuts to the focused EditBox.
+                    if (searchBox.keyPressed(event)) return true;
+                }
+            }
+
+            if (suggestionsOpen()) {
+                if (event.key() == InputConstants.KEY_TAB) {
+                    moveSuggestion(event.hasShiftDown() ? -1 : 1, true);
+                    return true;
+                }
+                if (event.key() == InputConstants.KEY_DOWN) {
+                    moveSuggestion(1, true);
+                    return true;
+                }
+                if (event.key() == InputConstants.KEY_UP) {
+                    moveSuggestion(-1, true);
+                    return true;
+                }
+                if (event.key() == InputConstants.KEY_RETURN) {
+                    chooseSuggestion(hoveredSuggestionIndex >= 0
+                            ? hoveredSuggestionIndex : suggestionIndex);
+                    return true;
+                }
+            } else if (event.key() == InputConstants.KEY_RETURN) {
+                chooseExactMatch();
                 return true;
             }
-            if (event.key() == InputConstants.KEY_DOWN) {
-                moveSuggestion(1, true);
-                return true;
-            }
-            if (event.key() == InputConstants.KEY_UP) {
-                moveSuggestion(-1, true);
-                return true;
-            }
-            if (event.key() == InputConstants.KEY_RETURN) {
-                chooseSuggestion(suggestionIndex);
-                return true;
-            }
-        } else if (searchBox != null && searchBox.isFocused()
-                && event.key() == InputConstants.KEY_RETURN) {
-            chooseExactMatch();
-            return true;
         }
         return super.keyPressed(event);
     }
@@ -279,11 +376,9 @@ public final class MainConfigScreen extends Screen {
             int x = (int) logicalEvent.x();
             int y = (int) logicalEvent.y();
             int row = (y - popupY()) / SUGGESTION_ROW_HEIGHT;
-            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS,
-                    suggestions.size() - suggestionScrollOffset);
+            int visibleCount = visibleSuggestionCount();
             if (x >= popupX() && x <= popupX() + PANEL_WIDTH - 40
-                    && row >= 0 && row < visibleCount
-                    && y < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT) {
+                    && y >= popupY() && row >= 0 && row < visibleCount) {
                 chooseSuggestion(suggestionScrollOffset + row);
                 return true;
             }
@@ -292,17 +387,38 @@ public final class MainConfigScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        MouseButtonEvent logicalEvent = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        float scale = ResponsiveUi.scale(width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        return super.mouseDragged(logicalEvent, dragX / scale, dragY / scale);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        return super.mouseReleased(
+                ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT));
+    }
+
+    @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        double logicalX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        double logicalY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        updateSuggestionHover(logicalX, logicalY);
+        super.mouseMoved(logicalX, logicalY);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         double logicalX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         double logicalY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         if (suggestionsOpen() && scrollY != 0) {
-            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS,
-                    suggestions.size() - suggestionScrollOffset);
-            boolean overPopup = logicalX >= popupX() && logicalX <= popupX() + PANEL_WIDTH - 40
-                    && logicalY >= popupY() && logicalY < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT;
+            int visibleCount = visibleSuggestionCount();
+            boolean overPopup = logicalX >= popupX() && logicalX < popupX() + PANEL_WIDTH - 40
+                    && logicalY >= popupY()
+                    && logicalY < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT;
             if (overPopup) {
-                // Wheel navigation stops at either end; keyboard Tab navigation wraps.
-                moveSuggestion(scrollY < 0 ? 1 : -1, false);
+                scrollSuggestionWindow(scrollY < 0 ? 1 : -1);
+                updateSuggestionHover(logicalX, logicalY);
                 return true;
             }
         }
@@ -311,7 +427,7 @@ public final class MainConfigScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
-        graphics.fillGradient(0, 0, width, height, 0xFF202329, 0xFF101215);
+        // Leave the area outside the menu panel transparent.
         ResponsiveUi.push(graphics, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         graphics.fill(left - 3, top - 3, left + PANEL_WIDTH + 3, top + PANEL_HEIGHT + 3, 0xAA050607);
         graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xEE292D32);
@@ -335,7 +451,7 @@ public final class MainConfigScreen extends Screen {
         graphics.text(font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
         graphics.text(font, "Adhesion", left + 22, top + 227, 0xFFE5E8EB);
         graphics.text(font, "O opens this screen  •  Settings are saved locally.", left + 20, top + 268, 0xFF9CA4AC);
-        graphics.text(font, "Tab / Shift+Tab navigate  •  Enter selects  •  ↑ / ↓ also navigate  •  Mouse wheel scrolls",
+        graphics.text(font, "Tab / Shift+Tab navigate  •  Enter selects  •  Mouse wheel scrolls the list",
                 left + 20, top + 286, 0xFF9CA4AC);
 
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
@@ -344,7 +460,7 @@ public final class MainConfigScreen extends Screen {
             int x = popupX();
             int y = popupY();
             int w = PANEL_WIDTH - 40;
-            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS, suggestions.size() - suggestionScrollOffset);
+            int visibleCount = visibleSuggestionCount();
             int h = visibleCount * SUGGESTION_ROW_HEIGHT;
             graphics.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xF0101113);
             graphics.outline(x - 1, y - 1, w + 2, h + 2, 0xFF6B737C);
@@ -352,13 +468,16 @@ public final class MainConfigScreen extends Screen {
                 int index = suggestionScrollOffset + row;
                 BlockSuggestion suggestion = suggestions.get(index);
                 int rowY = y + row * SUGGESTION_ROW_HEIGHT;
-                if (index == suggestionIndex) {
+                if (index == hoveredSuggestionIndex) {
+                    graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0xFF596A7D);
+                } else if (index == suggestionIndex) {
                     graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0xFF46515E);
                 } else if ((row & 1) == 1) {
                     graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0x661C2024);
                 }
                 graphics.text(font, suggestion.id(), x + 7, rowY + 5,
-                        index == suggestionIndex ? 0xFFFFFF55 : 0xFFE6E9ED);
+                        (index == hoveredSuggestionIndex || index == suggestionIndex)
+                                ? 0xFFFFFF55 : 0xFFE6E9ED);
                 int nameWidth = font.width(suggestion.name());
                 graphics.text(font, suggestion.name(), x + w - nameWidth - 8, rowY + 5, 0xFF9FA8B2);
             }

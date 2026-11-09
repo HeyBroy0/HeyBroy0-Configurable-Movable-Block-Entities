@@ -25,7 +25,7 @@ public final class MovableBlockEntitiesClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openConfiguration.consumeClick()) {
                 if (client.gui.screen() == null) {
-                    client.gui.setScreen(new MainConfigScreen("minecraft:stone"));
+                    client.gui.setScreen(new MainConfigScreen());
                 }
             }
         });

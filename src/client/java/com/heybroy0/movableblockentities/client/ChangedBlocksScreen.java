@@ -60,7 +60,6 @@ public final class ChangedBlocksScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
-        graphics.fillGradient(0, 0, width, height, 0xFF202329, 0xFF101215);
         ResponsiveUi.push(graphics, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         graphics.fill(left - 3, top - 3, left + PANEL_WIDTH + 3, top + PANEL_HEIGHT + 3, 0xAA050607);
         graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xEE292D32);

@@ -6,13 +6,14 @@ import net.minecraft.client.input.MouseButtonEvent;
 /** Shared transform and input mapping so each screen scales as one interactive layout. */
 public final class ResponsiveUi {
     private static final float EDGE_PADDING = 8.0F;
+    private static final float PREFERRED_SCALE = 0.75F;
 
     private ResponsiveUi() {}
 
     public static float scale(int screenWidth, int screenHeight, int baseWidth, int baseHeight) {
         float widthScale = Math.max(0.01F, (screenWidth - EDGE_PADDING * 2.0F) / baseWidth);
         float heightScale = Math.max(0.01F, (screenHeight - EDGE_PADDING * 2.0F) / baseHeight);
-        return Math.min(1.0F, Math.min(widthScale, heightScale));
+        return Math.min(PREFERRED_SCALE, Math.min(widthScale, heightScale));
     }
 
     public static float offsetX(int screenWidth, int screenHeight, int baseWidth, int baseHeight) {
