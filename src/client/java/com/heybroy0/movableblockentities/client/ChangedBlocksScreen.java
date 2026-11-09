@@ -451,7 +451,7 @@ public final class ChangedBlocksScreen extends Screen {
         VisibleRow row = visibleRows.get(rowIndex);
         ConfigStore.TreeEntry entry = row.entry();
         int rowY = TREE_Y + (rowIndex - treeScrollOffset) * ROW_HEIGHT;
-        int disclosureX = TREE_X + 8 + (row.depth() + 1) * 12;
+        int disclosureX = TREE_X + 2 + row.depth() * 12;
         int rowEnd = TREE_X + listWidth;
 
         if (event.button() != 1) return;
@@ -626,7 +626,7 @@ public final class ChangedBlocksScreen extends Screen {
             if (row.depth() > 0) {
                 graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
             }
-            int iconX = TREE_X + 8 + row.depth() * 12;
+            int iconX = TREE_X + 2 + row.depth() * 12;
             String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
             graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
