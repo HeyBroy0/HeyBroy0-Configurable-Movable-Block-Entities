@@ -116,7 +116,8 @@ public final class ChangedBlocksScreen extends Screen {
                 button -> {
                     if (!bulkMode) {
                         bulkMode = true;
-                        bulkParentId = activeFolderParent();
+                        ConfigStore.TreeEntry active = activeEntry();
+                        bulkParentId = active == null ? null : active.parentId();
                         rangeAnchor = findVisibleRowIndex(activeEntryId);
                     } else {
                         bulkMode = false;
@@ -239,7 +240,7 @@ public final class ChangedBlocksScreen extends Screen {
     private void createFolder() {
         String name = entryDraft.trim();
         List<String> ids = new ArrayList<>(selectedItems.keySet());
-        String destinationParent = selectedItems.isEmpty() ? activeFolderParent() : bulkParentId;
+        String destinationParent = bulkMode ? bulkParentId : activeFolderParent();
         ConfigStore.createFolder(name, destinationParent, ids);
         selectedItems.clear();
         activeEntryId = null;
@@ -602,6 +603,9 @@ public final class ChangedBlocksScreen extends Screen {
         } else {
             if (!bulkMode) {
                 clearSelection();
+                bulkParentId = entry.parentId();
+            } else if (selectedItems.isEmpty()) {
+                // A bulk session started empty: place a new folder beside the first chosen item.
                 bulkParentId = entry.parentId();
             }
             addSelected(entry);
