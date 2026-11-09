@@ -28,7 +28,6 @@ public final class MainConfigScreen extends Screen {
     private static final int PANEL_HEIGHT = 350;
     private static final int SUGGESTION_ROW_HEIGHT = 18;
     private static final int MAX_VISIBLE_SUGGESTIONS = 7;
-    static final String FOCUS_ALL_PREFIX = "focus-all|";
 
     // Session-only search memory: a fresh game launch begins with an empty search.
     private static String lastSearchValue = "";
@@ -43,9 +42,7 @@ public final class MainConfigScreen extends Screen {
 
     private String selectedBlockId;
     private String selectedEntryId;
-    private String focusContainerId;
     private List<String> focusEntryIds;
-    private int focusIndex;
     private BlockConfig config;
     private EditBox searchBox;
     private EditBox pushCostBox;
@@ -53,8 +50,6 @@ public final class MainConfigScreen extends Screen {
     private Button tickButton;
     private Button adhesionButton;
     private Button configureButton;
-    private Button previousFocusButton;
-    private Button nextFocusButton;
     private Button changedBlocksButton;
     private Button applyFocusedButton;
     private Button doneButton;
@@ -81,9 +76,7 @@ public final class MainConfigScreen extends Screen {
     public MainConfigScreen(String selectedBlockId, String selectedEntryId,
                             String focusContainerId, List<String> focusEntryIds, int focusIndex) {
         super(Component.literal("Configurable Movable Block Entities"));
-        this.focusContainerId = focusContainerId;
         this.focusEntryIds = focusEntryIds == null ? List.of() : List.copyOf(focusEntryIds);
-        this.focusIndex = focusIndex;
         this.selectedBlockId = selectedBlockId == null || selectedBlockId.isBlank()
                 ? (lastSelectedBlockId == null ? "minecraft:stone" : lastSelectedBlockId)
                 : selectedBlockId;
@@ -93,7 +86,9 @@ public final class MainConfigScreen extends Screen {
 
         ConfigStore.TreeEntry selected = selectedEntryId == null || selectedEntryId.isBlank()
                 ? ConfigStore.findTopmostBlockEntry(this.selectedBlockId)
-                : ConfigStore.touchTreeEntry(selectedEntryId, this.selectedBlockId);
+                : ConfigStore.treeEntriesTopDown().stream()
+                        .filter(entry -> entry.id().equals(selectedEntryId))
+                        .findFirst().orElse(null);
         if (selected != null) {
             this.selectedEntryId = selected.id();
         } else {
@@ -102,7 +97,7 @@ public final class MainConfigScreen extends Screen {
             this.selectedEntryId = "block|" + this.selectedBlockId;
         }
         lastSelectedEntryId = this.selectedEntryId;
-        normalizeFocusScope(selected);
+        normalizeFocusScope();
         this.config = ConfigStore.get(this.selectedBlockId, this.selectedEntryId);
     }
 
@@ -123,18 +118,6 @@ public final class MainConfigScreen extends Screen {
         searchBox.setResponder(this::onSearchValueChanged);
         refreshSuggestions(searchBox.getValue());
         addRenderableWidget(searchBox);
-
-        if (focusEntryIds.size() > 1) {
-            previousFocusButton = addRenderableWidget(Button.builder(Component.empty(),
-                            button -> moveFocusedEntry(-1))
-                    .tooltip(Tooltip.create(Component.literal("Previous item in focused folder / selector")))
-                    .bounds(left + PANEL_WIDTH - 70, top + 88, 22, 17).build());
-            nextFocusButton = addRenderableWidget(Button.builder(Component.empty(),
-                            button -> moveFocusedEntry(1))
-                    .tooltip(Tooltip.create(Component.literal("Next item in focused folder / selector")))
-                    .bounds(left + PANEL_WIDTH - 44, top + 88, 22, 17).build());
-            refreshFocusButtons();
-        }
 
         int labelX = left + 22;
         int controlX = left + 180;
@@ -168,7 +151,7 @@ public final class MainConfigScreen extends Screen {
 
         changedBlocksButton = addButton("", left + 20, top + 307, 132, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
-                        0, focusContainerId, focusEntryIds, focusIndex)));
+                        0, null, focusEntryIds, -1)));
         if (!focusEntryIds.isEmpty()) {
             applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
                     button -> applyFocusedSettings());
@@ -187,64 +170,23 @@ public final class MainConfigScreen extends Screen {
         return addRenderableWidget(Button.builder(Component.empty(), action).bounds(x, y, w, h).build());
     }
 
-    private void moveFocusedEntry(int direction) {
-        if (focusEntryIds.size() < 2) return;
-        int nextIndex = focusIndex < 0 ? (direction > 0 ? 0 : focusEntryIds.size() - 1)
-                : focusIndex + direction;
-        if (nextIndex < 0 || nextIndex >= focusEntryIds.size()) return;
-
-        focusIndex = nextIndex;
-        List<String> targetBlockIds = focusedTargetBlockIds();
-        if (targetBlockIds.isEmpty()) {
-            refreshFocusButtons();
-            return;
-        }
-        String entryId = targetBlockIds.get(0);
-        String blockId = blockIdForOccurrence(entryId);
-        if (blockId == null || blockId.isBlank()) {
-            refreshFocusButtons();
-            return;
-        }
-
-        selectedBlockId = blockId;
-        selectedEntryId = entryId;
-        lastSelectedBlockId = blockId;
-        lastSelectedEntryId = entryId;
-        config = ConfigStore.get(blockId, entryId);
-        suppressSuggestionActivation = true;
-        try {
-            searchBox.setValue(blockId);
-        } finally {
-            suppressSuggestionActivation = false;
-        }
-        searchBox.setCursorPosition(blockId.length());
-        suggestionsEnabled = false;
-        suggestions = List.of();
-        pushCostBox.setValue(Integer.toString(config.pushCost));
-        refreshControlLabels();
-        refreshFocusButtons();
-    }
-
     private List<String> focusedTargetBlockIds() {
         if (focusEntryIds.isEmpty()) return List.of(selectedEntryId);
-        int index = Math.max(0, Math.min(focusIndex, focusEntryIds.size() - 1));
-        String targetId = focusEntryIds.get(index);
-        if (targetId.startsWith(FOCUS_ALL_PREFIX)) {
-            String containerId = targetId.substring(FOCUS_ALL_PREFIX.length());
-            return ConfigStore.blockEntriesUnder(containerId).stream()
-                    .map(ConfigStore.TreeEntry::id).toList();
+
+        java.util.LinkedHashSet<String> blocks = new java.util.LinkedHashSet<>();
+        for (String targetId : focusEntryIds) {
+            ConfigStore.TreeEntry target = ConfigStore.findTreeEntry(targetId);
+            if (target == null) {
+                if (blockIdFromOccurrenceId(targetId) != null) blocks.add(targetId);
+            } else if (target.type() == ConfigStore.TreeEntryType.BLOCK) {
+                blocks.add(target.id());
+            } else {
+                for (ConfigStore.TreeEntry block : ConfigStore.blockEntriesUnder(targetId)) {
+                    blocks.add(block.id());
+                }
+            }
         }
-
-        ConfigStore.TreeEntry target = ConfigStore.findTreeEntry(targetId);
-        if (target == null) return List.of(targetId);
-        if (target.type() == ConfigStore.TreeEntryType.BLOCK) return List.of(targetId);
-        return ConfigStore.blockEntriesUnder(targetId).stream()
-                .map(ConfigStore.TreeEntry::id).toList();
-    }
-
-    private String blockIdForOccurrence(String entryId) {
-        ConfigStore.TreeEntry entry = ConfigStore.findTreeEntry(entryId);
-        return entry == null ? blockIdFromOccurrenceId(entryId) : entry.value();
+        return List.copyOf(blocks);
     }
 
     private String blockIdFromOccurrenceId(String id) {
@@ -255,47 +197,6 @@ public final class MainConfigScreen extends Screen {
             return separator < 0 ? null : id.substring(separator + 1);
         }
         return null;
-    }
-
-    private void refreshFocusButtons() {
-        if (previousFocusButton == null || nextFocusButton == null) return;
-        previousFocusButton.visible = focusEntryIds.size() > 1;
-        nextFocusButton.visible = focusEntryIds.size() > 1;
-        previousFocusButton.active = focusIndex > 0;
-        nextFocusButton.active = focusIndex >= 0 && focusIndex < focusEntryIds.size() - 1;
-        if (applyFocusedButton != null) applyFocusedButton.visible = !focusEntryIds.isEmpty();
-    }
-
-    private List<ConfigStore.TreeEntry> focusedSummaryEntries() {
-        List<ConfigStore.TreeEntry> entries;
-        if (focusContainerId != null) {
-            ConfigStore.TreeEntry container = ConfigStore.findTreeEntry(focusContainerId);
-            entries = container == null ? List.of() : ConfigStore.childrenOf(container);
-        } else {
-            ConfigStore.TreeEntry selected = ConfigStore.findTreeEntry(selectedEntryId);
-            if (selected != null && selected.parentId() != null) {
-                ConfigStore.TreeEntry parent = ConfigStore.findTreeEntry(selected.parentId());
-                entries = parent == null ? ConfigStore.rootEntries() : ConfigStore.childrenOf(parent);
-            } else {
-                entries = ConfigStore.rootEntries();
-            }
-        }
-        return entries.stream()
-                .sorted(java.util.Comparator.comparingInt((ConfigStore.TreeEntry entry) ->
-                                entry.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
-                        .thenComparingInt(ConfigStore.TreeEntry::order))
-                .toList();
-    }
-
-    private String currentFocusTargetName() {
-        if (focusEntryIds.isEmpty()) return "";
-        int index = Math.max(0, Math.min(focusIndex, focusEntryIds.size() - 1));
-        String targetId = focusEntryIds.get(index);
-        if (targetId.startsWith(FOCUS_ALL_PREFIX)) return "All";
-        ConfigStore.TreeEntry entry = ConfigStore.findTreeEntry(targetId);
-        if (entry != null) return summaryEntryName(entry);
-        String blockId = blockIdFromOccurrenceId(targetId);
-        return blockId == null ? "" : summaryBlockName(blockId);
     }
 
     private String summaryBlockName(String blockId) {
@@ -319,14 +220,19 @@ public final class MainConfigScreen extends Screen {
     }
 
     private String focusedSummary() {
-        List<ConfigStore.TreeEntry> entries = focusedSummaryEntries();
-        StringBuilder summary = new StringBuilder("(").append(entries.size()).append(")");
-        if (!focusEntryIds.isEmpty()) summary.append(" ").append(currentFocusTargetName()).append(" ·");
-        int count = Math.min(5, entries.size());
-        for (int i = 0; i < count; i++) {
-            summary.append(i == 0 ? " " : ", ").append(summaryEntryName(entries.get(i)));
+        if (focusEntryIds.isEmpty()) return "Focus: none";
+        StringBuilder summary = new StringBuilder("Focus (")
+                .append(focusEntryIds.size()).append("): ");
+        for (String targetId : focusEntryIds) {
+            ConfigStore.TreeEntry entry = ConfigStore.findTreeEntry(targetId);
+            String name = entry == null
+                    ? summaryBlockName(blockIdFromOccurrenceId(targetId))
+                    : summaryEntryName(entry);
+            if (name == null || name.isBlank()) continue;
+            if (summary.length() > ("Focus (" + focusEntryIds.size() + "): ").length()) summary.append(", ");
+            summary.append(name);
         }
-        return fitSingleLine(summary.toString(), 474 - (focusEntryIds.size() > 1 ? 52 : 0));
+        return fitSingleLine(summary.toString(), 474);
     }
 
     private String fitSingleLine(String value, int maxWidth) {
@@ -533,6 +439,7 @@ public final class MainConfigScreen extends Screen {
         if (index < 0 || index >= suggestions.size()) return;
         BlockSuggestion suggestion = suggestions.get(index);
         if (suggestion.tag()) {
+            clearFocusScope();
             ConfigStore.addBlockSelector(suggestion.id(), null);
             minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
             return;
@@ -543,6 +450,7 @@ public final class MainConfigScreen extends Screen {
     private void chooseExactMatch() {
         String query = searchBox.getValue().trim();
         if (query.startsWith("#") && ConfigStore.isBlockTag(query.substring(1))) {
+            clearFocusScope();
             ConfigStore.addBlockSelector(query.substring(1), null);
             minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
             return;
@@ -565,17 +473,8 @@ public final class MainConfigScreen extends Screen {
         lastSelectedBlockId = id;
 
         ConfigStore.TreeEntry selectedOccurrence = null;
-        if (focusContainerId != null) {
-            selectedOccurrence = ConfigStore.blockEntriesUnder(focusContainerId).stream()
-                    .filter(entry -> entry.value().equals(id))
-                    .findFirst().orElse(null);
-            if (selectedOccurrence == null) {
-                // Choosing a block outside the active folder/selector ends that focus scope.
-                clearFocusScope();
-            } else {
-                focusIndex = focusTargetIndexFor(selectedOccurrence);
-            }
-        }
+        // A completed search always ends the previous focus snapshot.
+        clearFocusScope();
 
         if (selectedOccurrence == null) {
             ConfigStore.TreeEntry topmost = ConfigStore.findTopmostBlockEntry(id);
@@ -607,57 +506,21 @@ public final class MainConfigScreen extends Screen {
         setFocused(searchBox);
         pushCostBox.setValue(Integer.toString(config.pushCost));
         refreshControlLabels();
-        refreshFocusButtons();
     }
 
-    private void normalizeFocusScope(ConfigStore.TreeEntry selected) {
-        if (focusContainerId == null) {
-            focusEntryIds = List.of();
-            focusIndex = -1;
-            return;
-        }
-
-        ConfigStore.TreeEntry container = ConfigStore.findTreeEntry(focusContainerId);
-        if (container == null || selected == null
-                || ConfigStore.blockEntriesUnder(focusContainerId).stream()
-                .noneMatch(entry -> entry.id().equals(selected.id()))) {
-            clearFocusScope();
-            return;
-        }
-
-        String requestedTarget = focusIndex >= 0 && focusIndex < focusEntryIds.size()
-                ? focusEntryIds.get(focusIndex) : null;
-        List<String> normalizedTargets = new ArrayList<>();
-        normalizedTargets.add(FOCUS_ALL_PREFIX + focusContainerId);
-        ConfigStore.childrenOf(container).stream()
-                .filter(child -> !ConfigStore.blockEntriesUnder(child.id()).isEmpty())
-                .sorted(java.util.Comparator.comparingInt((ConfigStore.TreeEntry child) ->
-                                child.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
-                        .thenComparingInt(ConfigStore.TreeEntry::order))
+    private void normalizeFocusScope() {
+        if (focusEntryIds.isEmpty()) return;
+        java.util.Set<String> available = ConfigStore.treeEntriesTopDown().stream()
                 .map(ConfigStore.TreeEntry::id)
-                .forEach(normalizedTargets::add);
-        focusEntryIds = List.copyOf(normalizedTargets);
-
-        int requestedIndex = requestedTarget == null ? -1 : focusEntryIds.indexOf(requestedTarget);
-        focusIndex = requestedIndex >= 0 ? requestedIndex : focusTargetIndexFor(selected);
-    }
-
-    private int focusTargetIndexFor(ConfigStore.TreeEntry occurrence) {
-        ConfigStore.TreeEntry cursor = occurrence;
-        while (cursor != null) {
-            int index = focusEntryIds.indexOf(cursor.id());
-            if (index >= 0) return index;
-            cursor = cursor.parentId() == null ? null : ConfigStore.findTreeEntry(cursor.parentId());
-        }
-        return 0; // The synthetic "All" item represents every descendant in this scope.
+                .collect(java.util.stream.Collectors.toSet());
+        focusEntryIds = focusEntryIds.stream()
+                .filter(id -> available.contains(id) || blockIdFromOccurrenceId(id) != null)
+                .distinct()
+                .toList();
     }
 
     private void clearFocusScope() {
-        focusContainerId = null;
         focusEntryIds = List.of();
-        focusIndex = -1;
-        if (previousFocusButton != null) previousFocusButton.visible = false;
-        if (nextFocusButton != null) nextFocusButton.visible = false;
         if (applyFocusedButton != null) applyFocusedButton.visible = false;
     }
 
@@ -665,7 +528,7 @@ public final class MainConfigScreen extends Screen {
         AdhesionEditorScreen.Page page = config.adhesion == Adhesion.HITBOX
                 ? AdhesionEditorScreen.Page.HITBOX : AdhesionEditorScreen.Page.ADVANCED;
         minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId,
-                page, focusedTargetBlockIds(), focusContainerId, focusEntryIds, focusIndex));
+                page, focusedTargetBlockIds(), null, focusEntryIds, -1));
     }
 
     private void closeConfiguration() {
