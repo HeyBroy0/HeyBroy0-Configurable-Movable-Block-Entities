@@ -279,8 +279,8 @@ public final class MainConfigScreen extends Screen {
             }
         }
         return entries.stream()
-                .sorted(java.util.Comparator.comparingInt(entry ->
-                        entry.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
+                .sorted(java.util.Comparator.comparingInt((ConfigStore.TreeEntry entry) ->
+                                entry.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
                         .thenComparingInt(ConfigStore.TreeEntry::order))
                 .toList();
     }
