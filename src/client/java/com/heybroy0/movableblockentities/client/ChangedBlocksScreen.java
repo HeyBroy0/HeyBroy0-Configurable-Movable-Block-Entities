@@ -803,7 +803,7 @@ public final class ChangedBlocksScreen extends Screen {
                 case TRANSFER -> "Transfer";
                 case DUPLICATE -> "Duplicate";
             };
-            String pushCost = config.pushCost == 1 ? "1 for 1/1" : "1/n for n " + config.pushCost;
+            String pushCost = config.pushCost == 1 ? "1" : "1/" + config.pushCost;
             return "| " + movementName + " | " + ticksName + " | " + pushCost + " | " + adhesion + " |";
         }
         int count = ConfigStore.blockEntriesUnder(entry.id()).size();
@@ -968,9 +968,13 @@ public final class ChangedBlocksScreen extends Screen {
         int textWidth = ResponsiveUi.textWidth(font, "Config");
         int totalWidth = iconWidth + 2 + textWidth;
         int startX = centerX - totalWidth / 2;
+        float iconScale = 1.35F;
+        float iconHeight = 9.0F * iconScale * 1.15F;
+        float iconY = configDirectoryButton.getY()
+                + (configDirectoryButton.getHeight() - iconHeight) / 2.0F;
         graphics.pose().pushMatrix();
-        graphics.pose().translate(startX + iconWidth / 2.0F, centerY + 1);
-        graphics.pose().scale(1.35F, 1.35F);
+        graphics.pose().translate(startX + iconWidth / 2.0F, iconY);
+        graphics.pose().scale(iconScale, iconScale);
         ResponsiveUi.centeredText(graphics, font, "📂", 0, 0,
                 configDirectoryButton.active ? 0xFFFFFFFF : 0xFF777777);
         graphics.pose().popMatrix();
@@ -988,12 +992,13 @@ public final class ChangedBlocksScreen extends Screen {
 
     private void drawToolbarSymbol(GuiGraphicsExtractor graphics, Button button, String symbol) {
         if (button == null || !button.visible) return;
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(button.getX() + button.getWidth() / 2.0F,
-                button.getY() + (button.getHeight() - 9) / 2.0F);
         float symbolScale = "☑".equals(symbol) ? 1.0F
                 : "📁".equals(symbol) ? 1.86F
                 : ("↶".equals(symbol) || "↷".equals(symbol)) ? 2.85F : 1.55F;
+        float symbolHeight = 9.0F * symbolScale * 1.15F;
+        float symbolY = button.getY() + (button.getHeight() - symbolHeight) / 2.0F;
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(button.getX() + button.getWidth() / 2.0F, symbolY);
         graphics.pose().scale(symbolScale, symbolScale);
         ResponsiveUi.centeredText(graphics, font, symbol, 0, 0, button.active ? 0xFFFFFFFF : 0xFF777777);
         graphics.pose().popMatrix();
