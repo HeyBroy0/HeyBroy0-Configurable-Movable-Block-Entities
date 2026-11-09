@@ -165,7 +165,7 @@ public final class MainConfigScreen extends Screen {
             String id = entry.getKey().identifier().toString();
             String name = entry.getValue().getName().getString();
             String normalizedName = name.toLowerCase(Locale.ROOT);
-            String path = entry.getKey().getPath().toLowerCase(Locale.ROOT);
+            String path = entry.getKey().identifier().getPath().toLowerCase(Locale.ROOT);
             if (id.toLowerCase(Locale.ROOT).startsWith(query)
                     || path.startsWith(query)
                     || normalizedName.startsWith(query)
