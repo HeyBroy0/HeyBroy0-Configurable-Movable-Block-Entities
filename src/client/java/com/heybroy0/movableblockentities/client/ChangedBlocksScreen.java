@@ -28,6 +28,9 @@ public final class ChangedBlocksScreen extends Screen {
     private static final int TOOLBAR_Y = 43;
     private static final int EDIT_Y = 68;
     private static final int TREE_X = 18;
+    private static final int TREE_INDENT = 12;
+    private static final int TREE_CONNECTOR_WIDTH = 1;
+    private static final int TREE_CONNECTOR_CENTER = 5;
     private static final int TREE_Y = 105;
     private static final int TREE_BOTTOM = 304;
     private static final int FOOTER_Y = 314;
@@ -432,19 +435,15 @@ public final class ChangedBlocksScreen extends Screen {
             }
             if (!current.inheritedMatch() && !matched && !hasMatchingDescendant) continue;
 
-            StringBuilder connector = new StringBuilder();
-            for (boolean ancestorWasLast : current.ancestorLastFlags()) {
-                connector.append(ancestorWasLast ? "   " : "│  ");
-            }
-            if (current.depth() > 0) connector.append(current.last() ? "└─ " : "├─ ");
-            rows.add(new VisibleRow(current.entry(), current.depth(), connector.toString()));
+            rows.add(new VisibleRow(current.entry(), current.depth(),
+                    current.ancestorLastFlags(), current.last()));
 
             boolean includeAllChildren = current.inheritedMatch() || matched;
             for (int i = children.size() - 1; i >= 0; i--) {
                 ConfigStore.TreeEntry child = children.get(i);
                 if (includeAllChildren || subtreeMatches(child, query)) {
                     List<Boolean> flags = new ArrayList<>(current.ancestorLastFlags());
-                    flags.add(current.last());
+                    if (current.depth() > 0) flags.add(current.last());
                     pending.push(new FilteredPendingRow(child, current.depth() + 1,
                             i == children.size() - 1, List.copyOf(flags), includeAllChildren));
                 }
@@ -459,12 +458,8 @@ public final class ChangedBlocksScreen extends Screen {
         pending.push(new PendingRow(entry, depth, last, ancestorLastFlags));
         while (!pending.isEmpty()) {
             PendingRow current = pending.pop();
-            StringBuilder connector = new StringBuilder();
-            for (boolean ancestorWasLast : current.ancestorLastFlags()) {
-                connector.append(ancestorWasLast ? "   " : "│  ");
-            }
-            if (current.depth() > 0) connector.append(current.last() ? "└─ " : "├─ ");
-            rows.add(new VisibleRow(current.entry(), current.depth(), connector.toString()));
+            rows.add(new VisibleRow(current.entry(), current.depth(),
+                    current.ancestorLastFlags(), current.last()));
 
             if (!current.entry().expanded() || current.entry().type() == ConfigStore.TreeEntryType.BLOCK) {
                 continue;
@@ -472,7 +467,7 @@ public final class ChangedBlocksScreen extends Screen {
             List<ConfigStore.TreeEntry> children = ConfigStore.childrenOf(current.entry());
             for (int i = children.size() - 1; i >= 0; i--) {
                 List<Boolean> childFlags = new ArrayList<>(current.ancestorLastFlags());
-                childFlags.add(current.last());
+                if (current.depth() > 0) childFlags.add(current.last());
                 pending.push(new PendingRow(children.get(i), current.depth() + 1,
                         i == children.size() - 1, List.copyOf(childFlags)));
             }
@@ -807,12 +802,17 @@ public final class ChangedBlocksScreen extends Screen {
                 graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0x44252B31);
             }
 
-            if (row.depth() > 0) {
-                ResponsiveUi.text(graphics, font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
+            if (row.depth() > 0) drawTreeConnectors(graphics, row, y);
+
+            int iconX = TREE_X + 2 + row.depth() * TREE_INDENT;
+            if (hasChildren(entry)) {
+                String disclosure = entry.expanded() ? "▾" : "▸";
+                graphics.pose().pushMatrix();
+                graphics.pose().translate(iconX + TREE_INDENT / 2.0F, y + 1.0F);
+                graphics.pose().scale(1.30F, 1.30F);
+                graphics.centeredText(font, disclosure, 0, 0, 0xFFB6C0CA);
+                graphics.pose().popMatrix();
             }
-            int iconX = TREE_X + 2 + row.depth() * 12;
-            String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
-            ResponsiveUi.text(graphics, font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
             int textX = iconX + 12;
             if (bulkMode) {
@@ -849,6 +849,28 @@ public final class ChangedBlocksScreen extends Screen {
             graphics.outline(tooltipX, tooltipY, tooltipWidth, 17, 0xFF69737D);
             ResponsiveUi.text(graphics, font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
         }
+    }
+
+    private void drawTreeConnectors(GuiGraphicsExtractor graphics, VisibleRow row, int y) {
+        final int baseX = TREE_X + 2;
+        final int centerY = y + ROW_HEIGHT / 2;
+        final int color = 0xFF8C98A5;
+
+        // Ancestor continuation lines occupy one fixed 12px indentation cell each.
+        for (int level = 0; level < row.ancestorLastFlags().size(); level++) {
+            if (!row.ancestorLastFlags().get(level)) {
+                int lineX = baseX + level * TREE_INDENT + TREE_CONNECTOR_CENTER;
+                graphics.fill(lineX, y, lineX + TREE_CONNECTOR_WIDTH, y + ROW_HEIGHT, color);
+            }
+        }
+
+        // The current branch uses the final cell and terminates or continues according
+        // to whether this entry is the last visible sibling in its group.
+        int branchX = baseX + (row.depth() - 1) * TREE_INDENT + TREE_CONNECTOR_CENTER;
+        int iconX = baseX + row.depth() * TREE_INDENT;
+        int branchBottom = row.last() ? centerY + 1 : y + ROW_HEIGHT;
+        graphics.fill(branchX, y, branchX + TREE_CONNECTOR_WIDTH, branchBottom, color);
+        graphics.fill(branchX, centerY, iconX + 1, centerY + TREE_CONNECTOR_WIDTH, color);
     }
 
     private void renderSelectionSidebar(GuiGraphicsExtractor graphics) {
@@ -1122,5 +1144,6 @@ public final class ChangedBlocksScreen extends Screen {
                               List<Boolean> ancestorLastFlags) {}
     private record FilteredPendingRow(ConfigStore.TreeEntry entry, int depth, boolean last,
                                       List<Boolean> ancestorLastFlags, boolean inheritedMatch) {}
-    private record VisibleRow(ConfigStore.TreeEntry entry, int depth, String connector) {}
+    private record VisibleRow(ConfigStore.TreeEntry entry, int depth,
+                              List<Boolean> ancestorLastFlags, boolean last) {}
 }
