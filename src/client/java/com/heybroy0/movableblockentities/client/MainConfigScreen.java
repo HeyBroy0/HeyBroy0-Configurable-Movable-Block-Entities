@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -41,6 +42,9 @@ public final class MainConfigScreen extends Screen {
 
     private String selectedBlockId;
     private String selectedEntryId;
+    private final String focusContainerId;
+    private final List<String> focusEntryIds;
+    private int focusIndex;
     private BlockConfig config;
     private EditBox searchBox;
     private EditBox pushCostBox;
@@ -48,6 +52,8 @@ public final class MainConfigScreen extends Screen {
     private Button tickButton;
     private Button adhesionButton;
     private Button configureButton;
+    private Button previousFocusButton;
+    private Button nextFocusButton;
     private List<BlockSuggestion> suggestions = List.of();
     private int suggestionIndex;
     private int hoveredSuggestionIndex = -1;
@@ -65,7 +71,15 @@ public final class MainConfigScreen extends Screen {
     }
 
     public MainConfigScreen(String selectedBlockId, String selectedEntryId) {
+        this(selectedBlockId, selectedEntryId, null, List.of(), -1);
+    }
+
+    public MainConfigScreen(String selectedBlockId, String selectedEntryId,
+                            String focusContainerId, List<String> focusEntryIds, int focusIndex) {
         super(Component.literal("Configurable Movable Block Entities"));
+        this.focusContainerId = focusContainerId;
+        this.focusEntryIds = focusEntryIds == null ? List.of() : List.copyOf(focusEntryIds);
+        this.focusIndex = focusIndex;
         this.selectedBlockId = selectedBlockId == null || selectedBlockId.isBlank()
                 ? (lastSelectedBlockId == null ? "minecraft:stone" : lastSelectedBlockId)
                 : selectedBlockId;
@@ -104,6 +118,18 @@ public final class MainConfigScreen extends Screen {
         searchBox.setResponder(this::onSearchValueChanged);
         refreshSuggestions(searchBox.getValue());
         addRenderableWidget(searchBox);
+
+        if (focusEntryIds.size() > 1) {
+            previousFocusButton = addRenderableWidget(Button.builder(Component.literal("‹"),
+                            button -> moveFocusedEntry(-1))
+                    .tooltip(Tooltip.create(Component.literal("Previous item in focused folder / selector")))
+                    .bounds(left + PANEL_WIDTH - 70, top + 88, 22, 17).build());
+            nextFocusButton = addRenderableWidget(Button.builder(Component.literal("›"),
+                            button -> moveFocusedEntry(1))
+                    .tooltip(Tooltip.create(Component.literal("Next item in focused folder / selector")))
+                    .bounds(left + PANEL_WIDTH - 44, top + 88, 22, 17).build());
+            refreshFocusButtons();
+        }
 
         int labelX = left + 22;
         int controlX = left + 205;
@@ -149,6 +175,98 @@ public final class MainConfigScreen extends Screen {
 
     private Button addButton(String label, int x, int y, int w, int h, Button.OnPress action) {
         return addRenderableWidget(Button.builder(Component.literal(label), action).bounds(x, y, w, h).build());
+    }
+
+    private void moveFocusedEntry(int direction) {
+        if (focusEntryIds.size() < 2) return;
+        int nextIndex = focusIndex < 0 ? (direction > 0 ? 0 : focusEntryIds.size() - 1)
+                : focusIndex + direction;
+        if (nextIndex < 0 || nextIndex >= focusEntryIds.size()) return;
+        String entryId = focusEntryIds.get(nextIndex);
+        ConfigStore.TreeEntry entry = ConfigStore.findTreeEntry(entryId);
+        String blockId = entry == null ? blockIdFromOccurrenceId(entryId) : entry.value();
+        if (blockId == null || blockId.isBlank()) return;
+        ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(entryId, blockId);
+        if (touched == null) return;
+        focusIndex = nextIndex;
+        selectedBlockId = blockId;
+        selectedEntryId = touched.id();
+        lastSelectedBlockId = blockId;
+        lastSelectedEntryId = touched.id();
+        config = ConfigStore.get(blockId, touched.id());
+        suppressSuggestionActivation = true;
+        try {
+            searchBox.setValue(blockId);
+        } finally {
+            suppressSuggestionActivation = false;
+        }
+        searchBox.setCursorPosition(blockId.length());
+        suggestionsEnabled = false;
+        suggestions = List.of();
+        pushCostBox.setValue(Integer.toString(config.pushCost));
+        refreshControlLabels();
+        refreshFocusButtons();
+    }
+
+    private String blockIdFromOccurrenceId(String id) {
+        if (id == null) return null;
+        if (id.startsWith("block|")) return id.substring("block|".length());
+        if (id.startsWith("tagblock|")) {
+            int separator = id.lastIndexOf('|');
+            return separator < 0 ? null : id.substring(separator + 1);
+        }
+        return null;
+    }
+
+    private void refreshFocusButtons() {
+        if (previousFocusButton == null || nextFocusButton == null) return;
+        previousFocusButton.active = focusIndex > 0;
+        nextFocusButton.active = focusIndex >= 0 && focusIndex < focusEntryIds.size() - 1;
+    }
+
+    private List<ConfigStore.TreeEntry> focusedSummaryEntries() {
+        if (focusContainerId != null) {
+            ConfigStore.TreeEntry container = ConfigStore.findTreeEntry(focusContainerId);
+            return container == null ? List.of() : ConfigStore.childrenOf(container);
+        }
+        ConfigStore.TreeEntry selected = ConfigStore.findTreeEntry(selectedEntryId);
+        if (selected != null && selected.parentId() != null) {
+            ConfigStore.TreeEntry parent = ConfigStore.findTreeEntry(selected.parentId());
+            if (parent != null) return ConfigStore.childrenOf(parent);
+        }
+        return ConfigStore.rootEntries();
+    }
+
+    private String summaryEntryName(ConfigStore.TreeEntry entry) {
+        if (entry.type() == ConfigStore.TreeEntryType.FOLDER) return entry.name();
+        if (entry.type() == ConfigStore.TreeEntryType.SELECTOR) {
+            String name = entry.name();
+            if (name.startsWith("#")) name = name.substring(1);
+            int separator = name.indexOf(':');
+            return separator >= 0 ? "#" + name.substring(separator + 1) : "#" + name;
+        }
+        String id = entry.value();
+        int separator = id == null ? -1 : id.indexOf(':');
+        String path = separator >= 0 ? id.substring(separator + 1) : (id == null ? "" : id);
+        return path.replace('_', ' ');
+    }
+
+    private String focusedSummary() {
+        List<ConfigStore.TreeEntry> entries = focusedSummaryEntries();
+        StringBuilder summary = new StringBuilder("(").append(entries.size()).append(")");
+        int count = Math.min(5, entries.size());
+        for (int i = 0; i < count; i++) {
+            summary.append(i == 0 ? " " : ", ").append(summaryEntryName(entries.get(i)));
+        }
+        return fitSingleLine(summary.toString(), 474 - (focusEntryIds.size() > 1 ? 52 : 0));
+    }
+
+    private String fitSingleLine(String value, int maxWidth) {
+        String result = value == null ? "" : value;
+        while (!result.isEmpty() && font.width(result) > maxWidth) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
     }
 
     private void cycleMovement() {
@@ -552,7 +670,7 @@ public final class MainConfigScreen extends Screen {
 
         graphics.centeredText(font, "CONFIGURABLE MOVABLE BLOCK ENTITIES", left + PANEL_WIDTH / 2, top + 13, 0xFFFFFFFF);
         graphics.text(font, "BLOCK SEARCH", left + 20, top + 49, 0xFFBFC6CF);
-        graphics.text(font, "Selected: " + selectedBlockId, left + 20, top + 91, 0xFF9FA8B2);
+        graphics.text(font, focusedSummary(), left + 20, top + 91, 0xFF9FA8B2);
         graphics.text(font, "Movement", left + 22, top + 122, 0xFFE5E8EB);
         graphics.text(font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
         graphics.text(font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
