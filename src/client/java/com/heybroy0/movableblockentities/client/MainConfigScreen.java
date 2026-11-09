@@ -54,6 +54,9 @@ public final class MainConfigScreen extends Screen {
     private Button configureButton;
     private Button previousFocusButton;
     private Button nextFocusButton;
+    private Button changedBlocksButton;
+    private Button applyFocusedButton;
+    private Button doneButton;
     private List<BlockSuggestion> suggestions = List.of();
     private int suggestionIndex;
     private int hoveredSuggestionIndex = -1;
@@ -120,11 +123,11 @@ public final class MainConfigScreen extends Screen {
         addRenderableWidget(searchBox);
 
         if (focusEntryIds.size() > 1) {
-            previousFocusButton = addRenderableWidget(Button.builder(Component.literal("‹"),
+            previousFocusButton = addRenderableWidget(Button.builder(Component.empty(),
                             button -> moveFocusedEntry(-1))
                     .tooltip(Tooltip.create(Component.literal("Previous item in focused folder / selector")))
                     .bounds(left + PANEL_WIDTH - 70, top + 88, 22, 17).build());
-            nextFocusButton = addRenderableWidget(Button.builder(Component.literal("›"),
+            nextFocusButton = addRenderableWidget(Button.builder(Component.empty(),
                             button -> moveFocusedEntry(1))
                     .tooltip(Tooltip.create(Component.literal("Next item in focused folder / selector")))
                     .bounds(left + PANEL_WIDTH - 44, top + 88, 22, 17).build());
@@ -158,16 +161,16 @@ public final class MainConfigScreen extends Screen {
         addRenderableWidget(pushCostBox);
 
         adhesionButton = addButton("", controlX, row4, 112, 22, button -> cycleAdhesion());
-        configureButton = addButton("Configure", controlX + 118, row4, 100, 22,
+        configureButton = addButton("", controlX + 118, row4, 100, 22,
                 button -> openAdhesionEditor());
 
-        addButton("Changed blocks", left + 20, top + 307, 132, 22,
+        changedBlocksButton = addButton("", left + 20, top + 307, 132, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0)));
         if (!focusEntryIds.isEmpty()) {
-            addButton("Apply to focused", left + 160, top + 307, 142, 22,
+            applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
                     button -> applyFocusedSettings());
         }
-        addButton("Done", left + PANEL_WIDTH - 112, top + 307, 92, 22,
+        doneButton = addButton("", left + PANEL_WIDTH - 112, top + 307, 92, 22,
                 button -> closeConfiguration());
 
         refreshControlLabels();
@@ -178,7 +181,7 @@ public final class MainConfigScreen extends Screen {
     }
 
     private Button addButton(String label, int x, int y, int w, int h, Button.OnPress action) {
-        return addRenderableWidget(Button.builder(Component.literal(label), action).bounds(x, y, w, h).build());
+        return addRenderableWidget(Button.builder(Component.empty(), action).bounds(x, y, w, h).build());
     }
 
     private void moveFocusedEntry(int direction) {
@@ -309,13 +312,13 @@ public final class MainConfigScreen extends Screen {
 
     private void refreshControlLabels() {
         if (movementButton == null) return;
-        movementButton.setMessage(Component.literal("‹  " + pretty(config.movement.name()) + "  ›"));
-        tickButton.setMessage(Component.literal("‹  " + pretty(config.scheduledTicks.name()) + "  ›"));
-        adhesionButton.setMessage(Component.literal("‹  " + pretty(config.adhesion.name()) + "  ›"));
+        movementButton.setMessage(Component.empty());
+        tickButton.setMessage(Component.empty());
+        adhesionButton.setMessage(Component.empty());
         boolean hasEditor = config.adhesion == Adhesion.HITBOX || config.adhesion == Adhesion.ADVANCED;
         configureButton.visible = hasEditor;
         configureButton.active = hasEditor;
-        configureButton.setMessage(Component.literal(config.adhesion == Adhesion.HITBOX ? "Hitbox settings" : "Advanced settings"));
+        configureButton.setMessage(Component.empty());
     }
 
     private static String pretty(String value) {
@@ -686,17 +689,18 @@ public final class MainConfigScreen extends Screen {
 
         ResponsiveUi.centeredText(graphics, font, "CONFIGURABLE MOVABLE BLOCK ENTITIES", left + PANEL_WIDTH / 2, top + 13, 0xFFFFFFFF);
         ResponsiveUi.text(graphics, font, "BLOCK SEARCH", left + 20, top + 49, 0xFFBFC6CF);
-        graphics.text(font, focusedSummary(), left + 20, top + 91, 0xFF9FA8B2);
-        graphics.text(font, "Movement", left + 22, top + 122, 0xFFE5E8EB);
-        graphics.text(font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
-        graphics.text(font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
-        graphics.text(font, "Adhesion", left + 22, top + 227, 0xFFE5E8EB);
-        graphics.text(font, MovableBlockEntitiesClient.getOpenConfigurationKeyName()
+        ResponsiveUi.text(graphics, font, focusedSummary(), left + 20, top + 91, 0xFF9FA8B2);
+        ResponsiveUi.text(graphics, font, "Movement", left + 22, top + 122, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Adhesion", left + 22, top + 227, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, MovableBlockEntitiesClient.getOpenConfigurationKeyName()
                 + " opens this screen  •  Settings are saved locally.", left + 20, top + 268, 0xFF9CA4AC);
-        graphics.text(font, "Tab / Shift+Tab navigate  •  Enter selects  •  Mouse wheel scrolls the list",
+        ResponsiveUi.text(graphics, font, "Tab / Shift+Tab navigate  •  Enter selects  •  Mouse wheel scrolls the list",
                 left + 20, top + 286, 0xFF9CA4AC);
 
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
+        renderButtonLabels(graphics);
 
         if (suggestionsOpen()) {
             int x = popupX();
@@ -717,14 +721,37 @@ public final class MainConfigScreen extends Screen {
                 } else if ((row & 1) == 1) {
                     graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0x661C2024);
                 }
-                graphics.text(font, suggestion.id(), x + 7, rowY + 5,
+                ResponsiveUi.text(graphics, font, suggestion.id(), x + 7, rowY + 5,
                         (index == hoveredSuggestionIndex || index == suggestionIndex)
                                 ? 0xFFFFFF55 : 0xFFE6E9ED);
                 int nameWidth = ResponsiveUi.textWidth(font, suggestion.name());
-                graphics.text(font, suggestion.name(), x + w - nameWidth - 8, rowY + 5, 0xFF9FA8B2);
+                ResponsiveUi.text(graphics, font, suggestion.name(), x + w - nameWidth - 8, rowY + 5, 0xFF9FA8B2);
             }
         }
         graphics.pose().popMatrix();
+    }
+
+    private void renderButtonLabels(GuiGraphicsExtractor graphics) {
+        drawButtonLabel(graphics, previousFocusButton, "‹");
+        drawButtonLabel(graphics, nextFocusButton, "›");
+        drawButtonLabel(graphics, movementButton, "‹  " + pretty(config.movement.name()) + "  ›");
+        drawButtonLabel(graphics, tickButton, "‹  " + pretty(config.scheduledTicks.name()) + "  ›");
+        drawButtonLabel(graphics, adhesionButton, "‹  " + pretty(config.adhesion.name()) + "  ›");
+        if (configureButton != null && configureButton.visible) {
+            drawButtonLabel(graphics, configureButton,
+                    config.adhesion == Adhesion.HITBOX ? "Hitbox settings" : "Advanced settings");
+        }
+        drawButtonLabel(graphics, changedBlocksButton, "Changed blocks");
+        drawButtonLabel(graphics, applyFocusedButton, "Apply to focused");
+        drawButtonLabel(graphics, doneButton, "Done");
+    }
+
+    private void drawButtonLabel(GuiGraphicsExtractor graphics, Button button, String label) {
+        if (button == null || !button.visible || label == null || label.isEmpty()) return;
+        int color = button.active ? 0xFFFFFFFF : 0xFF777777;
+        ResponsiveUi.centeredText(graphics, font, label,
+                button.getX() + button.getWidth() / 2,
+                button.getY() + Math.max(2, (button.getHeight() - 8) / 2), color);
     }
 
     @Override
