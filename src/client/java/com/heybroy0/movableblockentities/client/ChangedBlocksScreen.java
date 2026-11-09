@@ -52,6 +52,7 @@ public final class ChangedBlocksScreen extends Screen {
     private boolean dragIntoFolder;
     private boolean dragAfterTarget;
     private String activeEntryId;
+    private ConfigStore.TreeEntry activeEntrySnapshot;
     private String entryDraft = "";
 
     private EditBox entryNameBox;
@@ -174,7 +175,7 @@ public final class ChangedBlocksScreen extends Screen {
     private void refreshToolbar() {
         if (renameButton == null) return;
         boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId) && !bulkMode;
-        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
+        ConfigStore.TreeEntry active = activeEntry();
         boolean canFocus = active != null && !bulkMode;
         renameButton.visible = canRename;
         renameButton.active = canRename;
@@ -189,8 +190,13 @@ public final class ChangedBlocksScreen extends Screen {
         nextButton.active = page < pageCount() - 1;
     }
 
+    private ConfigStore.TreeEntry activeEntry() {
+        ConfigStore.TreeEntry stored = ConfigStore.findTreeEntry(activeEntryId);
+        return stored != null ? stored : activeEntrySnapshot;
+    }
+
     private String activeFolderParent() {
-        ConfigStore.TreeEntry selected = ConfigStore.findTreeEntry(activeEntryId);
+        ConfigStore.TreeEntry selected = activeEntry();
         if (selected == null) return null;
         return selected.type() == ConfigStore.TreeEntryType.FOLDER
                 ? selected.id() : selected.parentId();
@@ -202,6 +208,7 @@ public final class ChangedBlocksScreen extends Screen {
         ConfigStore.createFolder(name, bulkMode ? bulkParentId : activeFolderParent(), ids);
         selectedItems.clear();
         activeEntryId = null;
+        activeEntrySnapshot = null;
         rangeAnchor = -1;
         entryDraft = "";
         bulkMode = false;
@@ -212,7 +219,7 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void focusSelectedEntry() {
-        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
+        ConfigStore.TreeEntry active = activeEntry();
         if (active == null) return;
         if (active.type() == ConfigStore.TreeEntryType.BLOCK) {
             ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(active.id(), active.value());
@@ -220,6 +227,9 @@ public final class ChangedBlocksScreen extends Screen {
                     touched == null ? active.id() : touched.id()));
             return;
         }
+        active = ConfigStore.focusTreeEntry(active.id());
+        if (active == null) return;
+        activeEntrySnapshot = active;
         List<ConfigStore.TreeEntry> blocks = ConfigStore.blockEntriesUnder(active.id());
         if (blocks.isEmpty()) return;
         List<String> ids = blocks.stream().map(ConfigStore.TreeEntry::id).toList();
@@ -236,6 +246,7 @@ public final class ChangedBlocksScreen extends Screen {
         ConfigStore.deleteTreeEntries(ids);
         selectedItems.clear();
         activeEntryId = null;
+        activeEntrySnapshot = null;
         rangeAnchor = -1;
         bulkMode = false;
         bulkParentId = null;
@@ -252,6 +263,7 @@ public final class ChangedBlocksScreen extends Screen {
         List<String> copies = ConfigStore.copyTreeEntries(ids);
         selectedItems.clear();
         activeEntryId = copies.isEmpty() ? activeEntryId : copies.get(copies.size() - 1);
+        activeEntrySnapshot = activeEntryId == null ? null : ConfigStore.findTreeEntry(activeEntryId);
         rangeAnchor = -1;
         refreshTree();
         refreshToolbar();
@@ -261,6 +273,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (ConfigStore.undo()) {
             selectedItems.clear();
             activeEntryId = null;
+            activeEntrySnapshot = null;
             rangeAnchor = -1;
             refreshTree();
             refreshToolbar();
@@ -437,13 +450,13 @@ public final class ChangedBlocksScreen extends Screen {
         VisibleRow row = visibleRows.get(rowIndex);
         ConfigStore.TreeEntry entry = row.entry();
         int rowY = TREE_Y + (rowIndex - treeScrollOffset) * ROW_HEIGHT;
-        int disclosureX = TREE_X + 4 + row.depth() * 12;
+        int disclosureX = TREE_X + 8 + (row.depth() + 1) * 12;
         int rowEnd = TREE_X + listWidth;
 
         if (event.button() != 1) return;
-        disclosureX = TREE_X + 4 + (row.depth() + 1) * 12;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
             activeEntryId = entry.id();
+            activeEntrySnapshot = entry;
             ConfigStore.toggleExpanded(entry.id());
             if (entry.parentId() == null) page = 0;
             rangeAnchor = -1;
@@ -457,6 +470,7 @@ public final class ChangedBlocksScreen extends Screen {
             ConfigStore.revertInstance(entry.value(), entry.id());
             rangeAnchor = -1;
             refreshTree();
+            refreshToolbar();
             return;
         }
 
@@ -480,6 +494,7 @@ public final class ChangedBlocksScreen extends Screen {
         // A passive click establishes focus but does not reorder the row underneath the pointer.
         // Reordering occurs only when the player activates it (opens or expands it).
         activeEntryId = entry.id();
+        activeEntrySnapshot = entry;
         pressedEntry = entry;
         pressStartX = x;
         pressStartY = y;
@@ -495,8 +510,6 @@ public final class ChangedBlocksScreen extends Screen {
                         touched == null ? entry.id() : touched.id()));
             }
         } else {
-            entryDraft = entry.name();
-            if (entryNameBox != null) entryNameBox.setValue(entryDraft);
             if (doubleClick) {
                 ConfigStore.toggleExpanded(entry.id());
                 if (entry.parentId() == null) page = 0;
@@ -598,7 +611,7 @@ public final class ChangedBlocksScreen extends Screen {
             if (row.depth() > 0) {
                 graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
             }
-            int iconX = TREE_X + 4 + (row.depth() + 1) * 12;
+            int iconX = TREE_X + 8 + (row.depth() + 1) * 12;
             String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
             graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
