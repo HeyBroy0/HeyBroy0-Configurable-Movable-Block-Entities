@@ -23,7 +23,7 @@ public final class MovableBlockEntitiesClient implements ClientModInitializer {
         ConfigStore.load();
         // Re-resolve live selector members after the active world's block tags are available.
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
-                ConfigStore.rebuildRuntimeCache());
+                ConfigStore.onBlockTagsAvailable());
         KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "controls"));
         openConfiguration = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.movable_block_entities.open_config",
