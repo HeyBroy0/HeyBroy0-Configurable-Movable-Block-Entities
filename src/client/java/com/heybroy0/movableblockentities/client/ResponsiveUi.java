@@ -1,5 +1,6 @@
 package com.heybroy0.movableblockentities.client;
 
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
 
@@ -7,8 +8,31 @@ import net.minecraft.client.input.MouseButtonEvent;
 public final class ResponsiveUi {
     private static final float EDGE_PADDING = 8.0F;
     private static final float PREFERRED_SCALE = 0.75F;
+    private static final float TEXT_SCALE = 1.15F;
 
     private ResponsiveUi() {}
+
+    public static int textWidth(Font font, String text) {
+        return Math.round(font.width(text) * TEXT_SCALE);
+    }
+
+    public static void text(GuiGraphicsExtractor graphics, Font font, String text,
+                            int x, int y, int color) {
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(x, y);
+        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE);
+        graphics.text(font, text, 0, 0, color);
+        graphics.pose().popMatrix();
+    }
+
+    public static void centeredText(GuiGraphicsExtractor graphics, Font font, String text,
+                                    int centerX, int y, int color) {
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(centerX, y);
+        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE);
+        graphics.centeredText(font, text, 0, 0, color);
+        graphics.pose().popMatrix();
+    }
 
     public static float scale(int screenWidth, int screenHeight, int baseWidth, int baseHeight) {
         float widthScale = Math.max(0.01F, (screenWidth - EDGE_PADDING * 2.0F) / baseWidth);
