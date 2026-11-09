@@ -3,6 +3,7 @@ package com.heybroy0.movableblockentities.client;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -55,10 +56,14 @@ public final class ChangedBlocksScreen extends Screen {
 
     private EditBox entryNameBox;
     private Button folderButton;
-    private Button selectorButton;
     private Button renameButton;
     private Button bulkButton;
     private Button focusButton;
+    private Button deleteButton;
+    private Button copyButton;
+    private Button undoButton;
+    private Button redoButton;
+    private Button configDirectoryButton;
     private Button previousButton;
     private Button nextButton;
     private Button backButton;
@@ -82,31 +87,46 @@ public final class ChangedBlocksScreen extends Screen {
         page = Math.max(0, Math.min(page, pageCount - 1));
         rebuildVisibleRows();
 
-        folderButton = addButton("New folder", left + 18, top + TOOLBAR_Y, 88, 20,
-                button -> createFolder());
-        selectorButton = addButton("Add selector", left + 110, top + TOOLBAR_Y, 92, 20,
-                button -> addSelector());
-        renameButton = addButton("Rename", left + 206, top + TOOLBAR_Y, 66, 20,
-                button -> renameSelected());
-        bulkButton = addButton(bulkMode ? "Done selecting" : "Bulk select",
-                left + 276, top + TOOLBAR_Y, 104, 20, button -> {
+        folderButton = addButton("📁", left + 18, top + TOOLBAR_Y, 64, 20,
+                "New folder", button -> createFolder());
+        renameButton = addButton("✎", left + 86, top + TOOLBAR_Y, 34, 20,
+                "Rename folder", button -> renameSelected());
+        focusButton = addButton("◎", left + 124, top + TOOLBAR_Y, 34, 20,
+                "Focus selected entry", button -> focusSelectedEntry());
+        bulkButton = addButton(bulkMode ? "☑" : "☷",
+                left + 162, top + TOOLBAR_Y, 40, 20,
+                bulkMode ? "Finish bulk selection" : "Bulk select",
+                button -> {
                     if (!bulkMode) bulkParentId = activeFolderParent();
                     bulkMode = !bulkMode;
                     hoveredRow = -1;
                     rebuildVisibleRows();
                     refreshToolbar();
                 });
-        focusButton = addButton("Focus", left + 384, top + TOOLBAR_Y, 60, 20,
-                button -> focusSelectedBlock());
+        deleteButton = addButton("✕", left + 206, top + TOOLBAR_Y, 26, 20,
+                "Delete selected entries / revert blocks", button -> deleteSelectedEntries());
+        copyButton = addButton("⧉", left + 236, top + TOOLBAR_Y, 26, 20,
+                "Copy selected entries", button -> copySelectedEntries());
+        undoButton = addButton("↶", left + 266, top + TOOLBAR_Y, 26, 20,
+                "Undo last edit", button -> runUndo());
+        redoButton = addButton("↷", left + 296, top + TOOLBAR_Y, 26, 20,
+                "Redo last undone edit", button -> runRedo());
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
-                Component.literal("Folder name or block tag"));
-        entryNameBox.setMaxLength(120);
+                Component.literal("Search changed blocks"));
+        entryNameBox.setMaxLength(160);
         entryNameBox.setBordered(true);
-        entryNameBox.setHint(Component.literal("Folder name or #namespace:tag"));
+        entryNameBox.setHint(Component.literal("Search blocks, folders, and selectors"));
         entryNameBox.setValue(entryDraft);
-        entryNameBox.setResponder(value -> entryDraft = value);
+        entryNameBox.setResponder(value -> {
+            entryDraft = value;
+            page = 0;
+            treeScrollOffset = 0;
+            refreshTree();
+        });
         addRenderableWidget(entryNameBox);
+        configDirectoryButton = addButton("📂 Config", left + 386, top + EDIT_Y, 116, 18,
+                "Open this mod's config folder", button -> ConfigStore.openConfigDirectory());
 
         previousButton = addButton("‹ Previous", left + 18, top + FOOTER_Y, 100, 20, button -> {
             page = Math.max(0, page - 1);
@@ -131,20 +151,40 @@ public final class ChangedBlocksScreen extends Screen {
                 .bounds(x, y, width, height).build());
     }
 
+    private Button addButton(String label, int x, int y, int width, int height,
+                             String tooltip, Button.OnPress action) {
+        return addRenderableWidget(Button.builder(Component.literal(label), action)
+                .tooltip(Tooltip.create(Component.literal(tooltip)))
+                .bounds(x, y, width, height).build());
+    }
+
     private int pageCount() {
+        if (hasSearchFilter()) return 1;
         return Math.max(1, (roots.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+    }
+
+    private boolean hasSearchFilter() {
+        return entryDraft != null && !entryDraft.isBlank();
+    }
+
+    private String normalizedSearchFilter() {
+        return hasSearchFilter() ? entryDraft.trim().toLowerCase(java.util.Locale.ROOT) : "";
     }
 
     private void refreshToolbar() {
         if (renameButton == null) return;
         boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId) && !bulkMode;
         ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
-        boolean canFocus = active != null && active.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode;
+        boolean canFocus = active != null && !bulkMode;
         renameButton.visible = canRename;
         renameButton.active = canRename;
         focusButton.visible = canFocus;
         focusButton.active = canFocus;
-        bulkButton.setMessage(Component.literal(bulkMode ? "Done selecting" : "Bulk select"));
+        deleteButton.active = bulkMode ? !selectedItems.isEmpty() : active != null;
+        copyButton.active = bulkMode ? !selectedItems.isEmpty() : active != null;
+        undoButton.active = ConfigStore.canUndo();
+        redoButton.active = ConfigStore.canRedo();
+        bulkButton.setMessage(Component.literal(bulkMode ? "☑" : "☷"));
         previousButton.active = page > 0;
         nextButton.active = page < pageCount() - 1;
     }
@@ -171,24 +211,69 @@ public final class ChangedBlocksScreen extends Screen {
         init();
     }
 
-    private void addSelector() {
-        String raw = entryDraft.trim();
-        if (raw.startsWith("#")) raw = raw.substring(1);
-        if (!ConfigStore.isBlockTag(raw)) return;
-        ConfigStore.addBlockSelector(raw, activeFolderParent());
-        entryDraft = "";
-        rangeAnchor = -1;
-        page = 0;
-        treeScrollOffset = 0;
-        init();
-    }
-
-    private void focusSelectedBlock() {
+    private void focusSelectedEntry() {
         ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
-        if (active != null && active.type() == ConfigStore.TreeEntryType.BLOCK) {
+        if (active == null) return;
+        if (active.type() == ConfigStore.TreeEntryType.BLOCK) {
             ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(active.id(), active.value());
             minecraft.gui.setScreen(new MainConfigScreen(active.value(),
                     touched == null ? active.id() : touched.id()));
+            return;
+        }
+        List<ConfigStore.TreeEntry> blocks = ConfigStore.blockEntriesUnder(active.id());
+        if (blocks.isEmpty()) return;
+        List<String> ids = blocks.stream().map(ConfigStore.TreeEntry::id).toList();
+        ConfigStore.TreeEntry first = blocks.get(0);
+        ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(first.id(), first.value());
+        minecraft.gui.setScreen(new MainConfigScreen(first.value(),
+                touched == null ? first.id() : touched.id(), active.id(), ids, 0));
+    }
+
+    private void deleteSelectedEntries() {
+        List<String> ids = bulkMode ? new ArrayList<>(selectedItems.keySet())
+                : activeEntryId == null ? List.of() : List.of(activeEntryId);
+        if (ids.isEmpty()) return;
+        ConfigStore.deleteTreeEntries(ids);
+        selectedItems.clear();
+        activeEntryId = null;
+        rangeAnchor = -1;
+        bulkMode = false;
+        bulkParentId = null;
+        treeScrollOffset = 0;
+        page = 0;
+        refreshTree();
+        refreshToolbar();
+    }
+
+    private void copySelectedEntries() {
+        List<String> ids = bulkMode ? new ArrayList<>(selectedItems.keySet())
+                : activeEntryId == null ? List.of() : List.of(activeEntryId);
+        if (ids.isEmpty()) return;
+        List<String> copies = ConfigStore.copyTreeEntries(ids);
+        selectedItems.clear();
+        activeEntryId = copies.isEmpty() ? activeEntryId : copies.get(copies.size() - 1);
+        rangeAnchor = -1;
+        refreshTree();
+        refreshToolbar();
+    }
+
+    private void runUndo() {
+        if (ConfigStore.undo()) {
+            selectedItems.clear();
+            activeEntryId = null;
+            rangeAnchor = -1;
+            refreshTree();
+            refreshToolbar();
+        }
+    }
+
+    private void runRedo() {
+        if (ConfigStore.redo()) {
+            selectedItems.clear();
+            activeEntryId = null;
+            rangeAnchor = -1;
+            refreshTree();
+            refreshToolbar();
         }
     }
 
@@ -202,12 +287,17 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void rebuildVisibleRows() {
-        int start = page * PAGE_SIZE;
-        int end = Math.min(roots.size(), start + PAGE_SIZE);
+        int start = hasSearchFilter() ? 0 : page * PAGE_SIZE;
+        int end = hasSearchFilter() ? roots.size() : Math.min(roots.size(), start + PAGE_SIZE);
         List<VisibleRow> flattened = new ArrayList<>();
+        String query = normalizedSearchFilter();
         for (int i = start; i < end; i++) {
             ConfigStore.TreeEntry root = roots.get(i);
-            appendRows(flattened, root, 0, i == end - 1, List.of());
+            if (query.isEmpty()) {
+                appendRows(flattened, root, 0, i == end - 1, List.of());
+            } else if (subtreeMatches(root, query)) {
+                appendFilteredRows(flattened, root, i == end - 1, query);
+            }
         }
         visibleRows = List.copyOf(flattened);
         int visibleCount = maxVisibleRows();
@@ -215,6 +305,63 @@ public final class ChangedBlocksScreen extends Screen {
                 Math.max(0, visibleRows.size() - visibleCount)));
         selectionScrollOffset = Math.max(0, Math.min(selectionScrollOffset,
                 Math.max(0, selectedItems.size() - maxSelectionRows())));
+    }
+
+    private boolean matchesFilter(ConfigStore.TreeEntry entry, String query) {
+        String searchable = (entry.name() + " " + entry.value() + " " + entry.type().name())
+                .toLowerCase(java.util.Locale.ROOT);
+        return searchable.contains(query);
+    }
+
+    private boolean subtreeMatches(ConfigStore.TreeEntry entry, String query) {
+        Deque<ConfigStore.TreeEntry> pending = new ArrayDeque<>();
+        pending.push(entry);
+        while (!pending.isEmpty()) {
+            ConfigStore.TreeEntry current = pending.pop();
+            if (matchesFilter(current, query)) return true;
+            for (ConfigStore.TreeEntry child : ConfigStore.childrenOf(current)) pending.push(child);
+        }
+        return false;
+    }
+
+    private void appendFilteredRows(List<VisibleRow> rows, ConfigStore.TreeEntry root,
+                                   boolean last, String query) {
+        Deque<FilteredPendingRow> pending = new ArrayDeque<>();
+        pending.push(new FilteredPendingRow(root, 0, last, List.of(), false));
+        while (!pending.isEmpty()) {
+            FilteredPendingRow current = pending.pop();
+            boolean matched = matchesFilter(current.entry(), query);
+            List<ConfigStore.TreeEntry> children = current.entry().type() == ConfigStore.TreeEntryType.BLOCK
+                    ? List.of() : ConfigStore.childrenOf(current.entry());
+            boolean hasMatchingDescendant = false;
+            if (!current.inheritedMatch()) {
+                for (ConfigStore.TreeEntry child : children) {
+                    if (subtreeMatches(child, query)) {
+                        hasMatchingDescendant = true;
+                        break;
+                    }
+                }
+            }
+            if (!current.inheritedMatch() && !matched && !hasMatchingDescendant) continue;
+
+            StringBuilder connector = new StringBuilder();
+            for (boolean ancestorWasLast : current.ancestorLastFlags()) {
+                connector.append(ancestorWasLast ? "   " : "│  ");
+            }
+            if (current.depth() > 0) connector.append(current.last() ? "└─ " : "├─ ");
+            rows.add(new VisibleRow(current.entry(), current.depth(), connector.toString()));
+
+            boolean includeAllChildren = current.inheritedMatch() || matched;
+            for (int i = children.size() - 1; i >= 0; i--) {
+                ConfigStore.TreeEntry child = children.get(i);
+                if (includeAllChildren || subtreeMatches(child, query)) {
+                    List<Boolean> flags = new ArrayList<>(current.ancestorLastFlags());
+                    flags.add(current.last());
+                    pending.push(new FilteredPendingRow(child, current.depth() + 1,
+                            i == children.size() - 1, List.copyOf(flags), includeAllChildren));
+                }
+            }
+        }
     }
 
     private void appendRows(List<VisibleRow> rows, ConfigStore.TreeEntry entry,
@@ -226,9 +373,9 @@ public final class ChangedBlocksScreen extends Screen {
             PendingRow current = pending.pop();
             StringBuilder connector = new StringBuilder();
             for (boolean ancestorWasLast : current.ancestorLastFlags()) {
-                connector.append(ancestorWasLast ? "   " : "|  ");
+                connector.append(ancestorWasLast ? "   " : "│  ");
             }
-            if (current.depth() > 0) connector.append(current.last() ? "`- " : "|- ");
+            if (current.depth() > 0) connector.append(current.last() ? "└─ " : "├─ ");
             rows.add(new VisibleRow(current.entry(), current.depth(), connector.toString()));
 
             if (!current.entry().expanded() || current.entry().type() == ConfigStore.TreeEntryType.BLOCK) {
@@ -294,6 +441,7 @@ public final class ChangedBlocksScreen extends Screen {
         int rowEnd = TREE_X + listWidth;
 
         if (event.button() != 1) return;
+        disclosureX = TREE_X + 4 + (row.depth() + 1) * 12;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
             activeEntryId = entry.id();
             ConfigStore.toggleExpanded(entry.id());
@@ -375,10 +523,45 @@ public final class ChangedBlocksScreen extends Screen {
 
     private String entryLabel(ConfigStore.TreeEntry entry) {
         return switch (entry.type()) {
-            case FOLDER -> "[Folder] " + entry.name();
-            case SELECTOR -> entry.name();
-            case BLOCK -> entry.value();
+            case FOLDER, SELECTOR -> entry.name();
+            case BLOCK -> blockLabel(entry.value());
         };
+    }
+
+    private String blockLabel(String blockId) {
+        if (blockId == null) return "";
+        int separator = blockId.indexOf(':');
+        String path = separator >= 0 ? blockId.substring(separator + 1) : blockId;
+        StringBuilder result = new StringBuilder();
+        for (String word : path.replace('_', ' ').split(" ")) {
+            if (result.length() > 0) result.append(' ');
+            if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return result.toString();
+    }
+
+    private String configSummary(ConfigStore.TreeEntry entry) {
+        if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
+            ConfigStore.BlockConfig config = ConfigStore.get(entry.value(), entry.id());
+            String movement = switch (config.movement) {
+                case VANILLA -> "V";
+                case MOVABLE -> "M";
+                case BREAKABLE -> "B";
+                case IMMOVABLE -> "I";
+            };
+            String ticks = switch (config.scheduledTicks) {
+                case VANILLA -> "V";
+                case TRANSFER -> "T";
+                case DUPLICATE -> "D";
+            };
+            String adhesion = config.adhesion.name().toLowerCase(java.util.Locale.ROOT);
+            adhesion = Character.toUpperCase(adhesion.charAt(0)) + adhesion.substring(1);
+            return "|M:" + movement + "|S:" + ticks + "|P:" + config.pushCost + "|" + adhesion + "|";
+        }
+        int count = ConfigStore.blockEntriesUnder(entry.id()).size();
+        return entry.type() == ConfigStore.TreeEntryType.FOLDER
+                ? "Folder · " + count + " block entries"
+                : "Selector · " + count + " matching blocks";
     }
 
     private String fitText(String value, int maxWidth) {
@@ -412,22 +595,25 @@ public final class ChangedBlocksScreen extends Screen {
                 graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0x44252B31);
             }
 
-            int prefixX = TREE_X + 4 + row.depth() * 12;
             if (row.depth() > 0) {
                 graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
             }
-            int iconX = TREE_X + 4 + row.depth() * 12;
-            String disclosure = hasChildren(entry) ? (entry.expanded() ? "v" : ">") : " ";
+            int iconX = TREE_X + 4 + (row.depth() + 1) * 12;
+            String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
             graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
-            int textX = Math.max(prefixX + 12, TREE_X + 20 + row.depth() * 12);
+            int textX = iconX + 12;
             if (bulkMode) {
                 graphics.text(font, selected ? "[x]" : "[ ]", textX, y + 3, selected ? 0xFF86D99B : 0xFFADB6C0);
                 textX += 22;
             }
             int labelWidth = treeRight - textX - (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode ? 20 : 5);
-            graphics.text(font, fitText(entryLabel(entry), labelWidth), textX, y + 3,
-                    entry.type() == ConfigStore.TreeEntryType.SELECTOR ? 0xFF8FC7E8 : 0xFFE4E8EC);
+            int labelColor = switch (entry.type()) {
+                case FOLDER -> 0xFFFFB45C;
+                case SELECTOR -> 0xFF8FC7E8;
+                case BLOCK -> 0xFFE4E8EC;
+            };
+            graphics.text(font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
             if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
                 graphics.text(font, "x", treeRight - 13, y + 3, 0xFFDA8888);
             }
@@ -436,8 +622,20 @@ public final class ChangedBlocksScreen extends Screen {
                 graphics.fill(TREE_X - 1, markerY, treeRight, markerY + 2, 0xFF8FC7E8);
             }
         }
-        graphics.text(font, "Drag to reorder · drop on a folder to move · drop in blank space to root",
+        graphics.text(font, "Drag to reorder · drop on a folder to move · selector members copy when moved out",
                 TREE_X, TREE_BOTTOM + 2, 0xFF87919B);
+
+        if (hoveredRow >= treeScrollOffset
+                && hoveredRow < Math.min(visibleRows.size(), treeScrollOffset + maxVisibleRows())) {
+            ConfigStore.TreeEntry hovered = visibleRows.get(hoveredRow).entry();
+            String tooltip = configSummary(hovered);
+            int tooltipWidth = font.width(tooltip) + 12;
+            int tooltipX = Math.min(mouseX + 10, treeRight - tooltipWidth);
+            int tooltipY = Math.min(mouseY + 10, TREE_BOTTOM - 19);
+            graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 17, 0xF0101113);
+            graphics.outline(tooltipX, tooltipY, tooltipWidth, 17, 0xFF69737D);
+            graphics.text(font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
+        }
     }
 
     private void renderSelectionSidebar(GuiGraphicsExtractor graphics) {
@@ -482,7 +680,7 @@ public final class ChangedBlocksScreen extends Screen {
         graphics.centeredText(font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
         graphics.text(font, "Compact tree · folders and selectors stay on their page",
                 left + 18, top + 31, 0xFF9FA8B2);
-        graphics.text(font, "Root page " + (page + 1) + " / " + pageCount()
+        graphics.text(font, (hasSearchFilter() ? "Filtered view" : "Root page " + (page + 1) + " / " + pageCount())
                 + "  ·  " + ConfigStore.changedBlockIds().size() + " changed blocks",
                 left + 18, top + 92, 0xFFB7C0C9);
 
@@ -565,6 +763,7 @@ public final class ChangedBlocksScreen extends Screen {
             updateDragTarget(logical.x(), logical.y());
             ConfigStore.TreeEntry target = dragTargetIndex >= 0
                     ? visibleRows.get(dragTargetIndex).entry() : null;
+            // Moving a selector-generated block out of its selector creates an independent copy.
             ConfigStore.moveTreeEntry(pressedEntry, target, dragIntoFolder, dragAfterTarget);
             pressedEntry = null;
             dragging = false;
@@ -629,5 +828,7 @@ public final class ChangedBlocksScreen extends Screen {
 
     private record PendingRow(ConfigStore.TreeEntry entry, int depth, boolean last,
                               List<Boolean> ancestorLastFlags) {}
+    private record FilteredPendingRow(ConfigStore.TreeEntry entry, int depth, boolean last,
+                                      List<Boolean> ancestorLastFlags, boolean inheritedMatch) {}
     private record VisibleRow(ConfigStore.TreeEntry entry, int depth, String connector) {}
 }
