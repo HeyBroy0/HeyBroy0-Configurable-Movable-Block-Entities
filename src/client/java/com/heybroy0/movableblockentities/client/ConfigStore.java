@@ -645,14 +645,30 @@ public final class ConfigStore {
         for (TreeEntry entry : sourceSnapshots) {
             if (entry != null) unique.putIfAbsent(entry.id(), entry);
         }
-        if (unique.isEmpty() || targetSnapshot != null && unique.containsKey(targetSnapshot.id())) {
-            return false;
-        }
+        if (unique.isEmpty()) return false;
 
         java.util.Set<String> selectedIds = new java.util.LinkedHashSet<>(unique.keySet());
         List<TreeEntry> topLevel = new ArrayList<>();
         for (TreeEntry entry : unique.values()) {
             if (!hasSelectedAncestor(entry, selectedIds)) topLevel.add(entry);
+        }
+        if (topLevel.isEmpty()
+                || targetSnapshot != null && topLevel.stream().anyMatch(entry -> entry.id().equals(targetSnapshot.id()))) {
+            return false;
+        }
+
+        String destinationParent = intoTarget && targetSnapshot != null
+                && targetSnapshot.type() == TreeEntryType.FOLDER
+                ? targetSnapshot.id()
+                : targetSnapshot == null ? null : targetSnapshot.parentId();
+        if (intoTarget && (targetSnapshot == null || targetSnapshot.type() != TreeEntryType.FOLDER)) return false;
+        TreeEntry destinationContainer = destinationParent == null ? null : TREE_ENTRIES.get(destinationParent);
+        for (TreeEntry source : topLevel) {
+            if (destinationContainer != null && destinationContainer.type() == TreeEntryType.SELECTOR
+                    && !Objects.equals(source.parentId(), destinationParent)) return false;
+            if (source.type() != TreeEntryType.BLOCK && destinationParent != null
+                    && (destinationParent.equals(source.id())
+                    || isDescendantOf(source.id(), destinationParent))) return false;
         }
 
         // Inserting repeatedly just after a fixed anchor reverses order, so process that
