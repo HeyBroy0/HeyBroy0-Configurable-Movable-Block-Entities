@@ -88,14 +88,14 @@ public final class ChangedBlocksScreen extends Screen {
         page = Math.max(0, Math.min(page, pageCount - 1));
         rebuildVisibleRows();
 
-        folderButton = addButton("📁", left + 18, top + TOOLBAR_Y, 64, 20,
+        folderButton = addButton("📁", left + 18, top + TOOLBAR_Y, 64, 24,
                 "New folder", button -> createFolder());
-        renameButton = addButton("✎", left + 86, top + TOOLBAR_Y, 34, 20,
+        renameButton = addButton("✎", left + 86, top + TOOLBAR_Y, 36, 24,
                 "Rename folder", button -> renameSelected());
-        focusButton = addButton("◎", left + 124, top + TOOLBAR_Y, 34, 20,
+        focusButton = addButton("◎", left + 126, top + TOOLBAR_Y, 36, 24,
                 "Focus selected entry", button -> focusSelectedEntry());
         bulkButton = addButton(bulkMode ? "☑" : "☷",
-                left + 162, top + TOOLBAR_Y, 40, 20,
+                left + 166, top + TOOLBAR_Y, 40, 24,
                 bulkMode ? "Finish bulk selection" : "Bulk select",
                 button -> {
                     if (!bulkMode) bulkParentId = activeFolderParent();
@@ -104,13 +104,13 @@ public final class ChangedBlocksScreen extends Screen {
                     rebuildVisibleRows();
                     refreshToolbar();
                 });
-        deleteButton = addButton("❌", left + 206, top + TOOLBAR_Y, 26, 20,
+        deleteButton = addButton("❌", left + 210, top + TOOLBAR_Y, 30, 24,
                 "Delete selected entries / revert blocks", button -> deleteSelectedEntries());
-        undoButton = addButton("↶", left + 236, top + TOOLBAR_Y, 26, 20,
+        undoButton = addButton("↶", left + 244, top + TOOLBAR_Y, 30, 24,
                 "Undo last edit", button -> runUndo());
-        redoButton = addButton("↷", left + 266, top + TOOLBAR_Y, 26, 20,
+        redoButton = addButton("↷", left + 278, top + TOOLBAR_Y, 30, 24,
                 "Redo last undone edit", button -> runRedo());
-        copyButton = addButton("⧉", left + 296, top + TOOLBAR_Y, 26, 20,
+        copyButton = addButton("⧉", left + 312, top + TOOLBAR_Y, 30, 24,
                 "Copy selected entries", button -> copySelectedEntries());
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
@@ -572,7 +572,19 @@ public final class ChangedBlocksScreen extends Screen {
             };
             String adhesion = config.adhesion.name().toLowerCase(java.util.Locale.ROOT);
             adhesion = Character.toUpperCase(adhesion.charAt(0)) + adhesion.substring(1);
-            return "|M:" + movement + "|S:" + ticks + "|P:" + config.pushCost + "|" + adhesion + "|";
+            String movementName = switch (config.movement) {
+                case VANILLA -> "Vanilla";
+                case MOVABLE -> "Movable";
+                case BREAKABLE -> "Breakable";
+                case IMMOVABLE -> "Immovable";
+            };
+            String ticksName = switch (config.scheduledTicks) {
+                case VANILLA -> "Vanilla";
+                case TRANSFER -> "Transfer";
+                case DUPLICATE -> "Duplicate";
+            };
+            String pushCost = config.pushCost == 1 ? "1 for 1/1" : "1/n for n " + config.pushCost;
+            return "| " + movementName + " | " + ticksName + " | " + pushCost + " | " + adhesion + " |";
         }
         int count = ConfigStore.blockEntriesUnder(entry.id()).size();
         return entry.type() == ConfigStore.TreeEntryType.FOLDER
@@ -614,7 +626,7 @@ public final class ChangedBlocksScreen extends Screen {
             if (row.depth() > 0) {
                 graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
             }
-            int iconX = TREE_X + 8 + (row.depth() + 1) * 12;
+            int iconX = TREE_X + 8 + row.depth() * 12;
             String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
             graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
@@ -647,7 +659,7 @@ public final class ChangedBlocksScreen extends Screen {
             String tooltip = configSummary(hovered);
             int tooltipWidth = font.width(tooltip) + 12;
             int tooltipX = Math.min(mouseX + 10, treeRight - tooltipWidth);
-            int tooltipY = Math.min(mouseY + 10, TREE_BOTTOM - 19);
+            int tooltipY = Math.min(mouseY + 16, TREE_BOTTOM - 19);
             graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 17, 0xF0101113);
             graphics.outline(tooltipX, tooltipY, tooltipWidth, 17, 0xFF69737D);
             graphics.text(font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
