@@ -1,5 +1,7 @@
 package com.heybroy0.movableblockentities.client;
 
+import com.heybroy0.movableblockentities.core.RuntimeConfigCache;
+
 import com.mojang.blaze3d.Blaze3D;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -38,6 +40,7 @@ public final class ConfigStore {
             .resolve("movable-block-entities");
     private static final Path CACHE_DIRECTORY = CONFIG_DIRECTORY.resolve("cache");
     private static final Path FILE = CONFIG_DIRECTORY.resolve("settings.properties");
+    private static final Path RUNTIME_CACHE_FILE = CACHE_DIRECTORY.resolve("runtime-config.properties");
     private static final int HISTORY_LIMIT = 24;
     private static final Deque<StoreSnapshot> UNDO_HISTORY = new ArrayDeque<>();
     private static final Deque<StoreSnapshot> REDO_HISTORY = new ArrayDeque<>();
@@ -53,6 +56,7 @@ public final class ConfigStore {
         loaded = true;
         if (!Files.exists(FILE)) {
             resetHistoryBaseline();
+            rebuildRuntimeCache();
             return;
         }
 
@@ -121,6 +125,9 @@ public final class ConfigStore {
             }
             resetHistoryBaseline();
         }
+        // Export after load/recovery. Selector members are refreshed again after the
+        // client receives the active world's tag data.
+        rebuildRuntimeCache();
     }
 
     /**
@@ -245,6 +252,58 @@ public final class ConfigStore {
             }
         });
         return List.copyOf(result);
+    }
+
+    /**
+     * Exports the effective block settings as a flattened, GUI-independent runtime snapshot.
+     * Tree priority is resolved here; runtime consumers only need to look up a block id.
+     */
+    public static synchronized void rebuildRuntimeCache() {
+        load();
+        Map<String, RuntimeConfigCache.BlockSettings> effective = new LinkedHashMap<>();
+        Deque<TreeEntry> pending = new ArrayDeque<>();
+        List<TreeEntry> roots = rootEntries();
+        for (int i = roots.size() - 1; i >= 0; i--) pending.push(roots.get(i));
+
+        while (!pending.isEmpty()) {
+            TreeEntry entry = pending.pop();
+            if (entry.type() == TreeEntryType.BLOCK) {
+                String blockId = entry.value();
+                if (blockId == null || blockId.isBlank() || effective.containsKey(blockId)) continue;
+
+                BlockConfig config = BLOCKS.get(entry.id());
+                if (config == null) config = BLOCKS.get(blockId);
+                if (config == null) config = new BlockConfig();
+
+                Map<String, Boolean> faces = new TreeMap<>();
+                config.faces.forEach((face, enabled) -> faces.put(face.name(), enabled));
+                effective.put(blockId, new RuntimeConfigCache.BlockSettings(
+                        blockId,
+                        config.movement.name(),
+                        config.scheduledTicks.name(),
+                        config.pushCost,
+                        config.adhesion.name(),
+                        config.geometrySource.name(),
+                        config.minimumSquare,
+                        config.depth,
+                        config.orientation.name(),
+                        config.leadDirection,
+                        faces,
+                        entry.id()
+                ));
+                continue;
+            }
+
+            List<TreeEntry> children = childrenOf(entry);
+            for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
+        }
+
+        try {
+            RuntimeConfigCache.write(RUNTIME_CACHE_FILE, effective);
+        } catch (IOException exception) {
+            System.err.println("[Movable Block Entities] Could not write runtime config cache: "
+                    + exception.getMessage());
+        }
     }
 
     /** Returns the active block-tag ids, matched against their full namespaced id. */
@@ -1096,6 +1155,7 @@ public final class ConfigStore {
             } catch (AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, FILE, StandardCopyOption.REPLACE_EXISTING);
             }
+            rebuildRuntimeCache();
         } catch (IOException exception) {
             System.err.println("[Movable Block Entities] Could not save settings: " + exception.getMessage());
         }
