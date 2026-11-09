@@ -48,6 +48,7 @@ public final class ChangedBlocksScreen extends Screen {
     private Button selectorButton;
     private Button renameButton;
     private Button bulkButton;
+    private Button focusButton;
     private Button previousButton;
     private Button nextButton;
     private Button backButton;
@@ -84,6 +85,8 @@ public final class ChangedBlocksScreen extends Screen {
                     rebuildVisibleRows();
                     refreshToolbar();
                 });
+        focusButton = addButton("Focus", left + 384, top + TOOLBAR_Y, 60, 20,
+                button -> focusSelectedBlock());
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
                 Component.literal("Folder name or block tag"));
@@ -97,11 +100,13 @@ public final class ChangedBlocksScreen extends Screen {
         previousButton = addButton("‹ Previous", left + 18, top + FOOTER_Y, 100, 20, button -> {
             page = Math.max(0, page - 1);
             treeScrollOffset = 0;
+            rangeAnchor = -1;
             init();
         });
         nextButton = addButton("Next ›", left + 126, top + FOOTER_Y, 85, 20, button -> {
             page = Math.min(pageCount() - 1, page + 1);
             treeScrollOffset = 0;
+            rangeAnchor = -1;
             init();
         });
         backButton = addButton("Back", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
@@ -121,9 +126,13 @@ public final class ChangedBlocksScreen extends Screen {
 
     private void refreshToolbar() {
         if (renameButton == null) return;
-        boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId);
+        boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId) && !bulkMode;
+        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
+        boolean canFocus = active != null && active.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode;
         renameButton.visible = canRename;
         renameButton.active = canRename;
+        focusButton.visible = canFocus;
+        focusButton.active = canFocus;
         bulkButton.setMessage(Component.literal(bulkMode ? "Done selecting" : "Bulk select"));
         previousButton.active = page > 0;
         nextButton.active = page < pageCount() - 1;
@@ -142,6 +151,7 @@ public final class ChangedBlocksScreen extends Screen {
         ConfigStore.createFolder(name, activeFolderParent(), ids);
         selectedItems.clear();
         activeEntryId = null;
+        rangeAnchor = -1;
         entryDraft = "";
         bulkMode = false;
         treeScrollOffset = 0;
@@ -155,9 +165,17 @@ public final class ChangedBlocksScreen extends Screen {
         if (!ConfigStore.isBlockTag(raw)) return;
         ConfigStore.addBlockSelector(raw, activeFolderParent());
         entryDraft = "";
+        rangeAnchor = -1;
         page = 0;
         treeScrollOffset = 0;
         init();
+    }
+
+    private void focusSelectedBlock() {
+        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
+        if (active != null && active.type() == ConfigStore.TreeEntryType.BLOCK) {
+            minecraft.gui.setScreen(new MainConfigScreen(active.value()));
+        }
     }
 
     private void renameSelected() {
@@ -255,6 +273,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (event.button() != 1) return;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
             ConfigStore.toggleExpanded(entry.id());
+            rangeAnchor = -1;
             refreshTree();
             return;
         }
@@ -262,6 +281,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (!bulkMode && entry.type() == ConfigStore.TreeEntryType.BLOCK
                 && x >= rowEnd - 17) {
             ConfigStore.revert(entry.value());
+            rangeAnchor = -1;
             refreshTree();
             return;
         }
@@ -289,6 +309,7 @@ public final class ChangedBlocksScreen extends Screen {
             if (entryNameBox != null) entryNameBox.setValue(entryDraft);
             if (doubleClick) {
                 ConfigStore.toggleExpanded(entry.id());
+                rangeAnchor = -1;
                 refreshTree();
             }
             refreshToolbar();
@@ -304,7 +325,7 @@ public final class ChangedBlocksScreen extends Screen {
     private String entryLabel(ConfigStore.TreeEntry entry) {
         return switch (entry.type()) {
             case FOLDER -> "[Folder] " + entry.name();
-            case SELECTOR -> entry.name().startsWith("#") ? entry.name() : "#" + entry.value();
+            case SELECTOR -> entry.name();
             case BLOCK -> entry.value();
         };
     }
