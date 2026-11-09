@@ -109,7 +109,91 @@ public final class ConfigStore {
             TREE_ENTRIES.put(id, new TreeEntry(id, type, name, value,
                     parent.isBlank() ? null : parent, order, expanded));
         }
+        int recoveredEntries = repairUnreachableTreeEntries();
         resetHistoryBaseline();
+        if (recoveredEntries > 0) {
+            System.err.println("[Movable Block Entities] Recovered " + recoveredEntries
+                    + " unreachable tree entr" + (recoveredEntries == 1 ? "y" : "ies")
+                    + " by restoring their directory paths to the root.");
+            // Persist the repaired hierarchy immediately so it remains accessible on next launch.
+            save();
+        }
+    }
+
+    /**
+     * Finds saved entries that cannot be reached from a root entry and reconnects their
+     * orphaned components. Missing parents and block-as-parent references are detached
+     * directly; parent-reference cycles are broken at one deterministic cycle entry.
+     * All entries and their descendants are retained.
+     */
+    private static int repairUnreachableTreeEntries() {
+        Map<String, List<TreeEntry>> storedChildren = new java.util.HashMap<>();
+        Deque<TreeEntry> pending = new ArrayDeque<>();
+        for (TreeEntry entry : TREE_ENTRIES.values()) {
+            if (entry.parentId() == null) {
+                pending.addLast(entry);
+            } else {
+                storedChildren.computeIfAbsent(entry.parentId(), ignored -> new ArrayList<>()).add(entry);
+            }
+        }
+
+        java.util.Set<String> reachable = new java.util.HashSet<>();
+        while (!pending.isEmpty()) {
+            TreeEntry current = pending.removeFirst();
+            if (!reachable.add(current.id()) || current.type() == TreeEntryType.BLOCK) continue;
+            pending.addAll(storedChildren.getOrDefault(current.id(), List.of()));
+        }
+
+        java.util.Set<String> unreachable = new java.util.LinkedHashSet<>(TREE_ENTRIES.keySet());
+        unreachable.removeAll(reachable);
+        if (unreachable.isEmpty()) return 0;
+
+        java.util.Set<String> promoteToRoot = new java.util.LinkedHashSet<>();
+        for (String id : unreachable) {
+            TreeEntry entry = TREE_ENTRIES.get(id);
+            TreeEntry parent = entry == null ? null : TREE_ENTRIES.get(entry.parentId());
+            if (parent == null || parent.type() == TreeEntryType.BLOCK) {
+                promoteToRoot.add(id);
+            }
+        }
+
+        // Any remaining unreachable component must contain a cycle in its parent links.
+        // Pick the lexicographically first entry in each cycle as its stable root.
+        java.util.Set<String> cycleCandidates = new java.util.HashSet<>(unreachable);
+        cycleCandidates.removeAll(promoteToRoot);
+        java.util.Set<String> processed = new java.util.HashSet<>();
+        for (String start : cycleCandidates) {
+            if (processed.contains(start)) continue;
+            List<String> path = new ArrayList<>();
+            Map<String, Integer> pathPositions = new java.util.HashMap<>();
+            String cursor = start;
+            while (cursor != null && cycleCandidates.contains(cursor) && !processed.contains(cursor)) {
+                Integer cycleStart = pathPositions.get(cursor);
+                if (cycleStart != null) {
+                    String cycleRoot = path.subList(cycleStart, path.size()).stream()
+                            .min(Comparator.naturalOrder()).orElse(cursor);
+                    promoteToRoot.add(cycleRoot);
+                    break;
+                }
+                pathPositions.put(cursor, path.size());
+                path.add(cursor);
+                TreeEntry current = TREE_ENTRIES.get(cursor);
+                cursor = current == null ? null : current.parentId();
+            }
+            processed.addAll(path);
+        }
+
+        int nextRootOrder = TREE_ENTRIES.values().stream()
+                .filter(entry -> entry.parentId() == null)
+                .mapToInt(TreeEntry::order).max().orElse(-1) + 1;
+        int recovered = 0;
+        for (String id : promoteToRoot) {
+            TreeEntry entry = TREE_ENTRIES.get(id);
+            if (entry == null) continue;
+            TREE_ENTRIES.put(id, entry.withParent(null, nextRootOrder++));
+            recovered++;
+        }
+        return recovered;
     }
 
     private static String decodeConfigKey(String encoded, String fallback) {
@@ -467,9 +551,9 @@ public final class ConfigStore {
                 if (existing != null && selectedId.startsWith("tagblock|")
                         && existing.type() == TreeEntryType.BLOCK) {
                     String selectorId = existing.parentId();
-                    // A selector membership is a distinct occurrence. Put a copy in the folder
-                    // while preserving the selector's live member and its own settings.
-                    if (selectorId == null || !selected.contains(selectorId)) {
+                    // A selector-derived row is covered when its selector or any containing
+                    // directory is selected. Otherwise keep the live selector and copy the row.
+                    if (selectorId == null || !isSelectedOrHasSelectedAncestor(selectorId, selected)) {
                         copyBlockNode(existing.value(), existing.id(), id);
                     }
                     continue;
@@ -487,9 +571,17 @@ public final class ConfigStore {
                 String blockId = blockIdFromEntryId(selectedId);
                 if (blockId != null) {
                     String selectorId = tagBlockParentFromEntryId(selectedId);
-                    if (selectorId != null && selected.contains(selectorId)) continue;
-                    // A generated selector row is copied; a generated root row is moved.
-                    copyBlockNode(blockId, selectedId, id);
+                    if (selectorId != null && isSelectedOrHasSelectedAncestor(selectorId, selected)) continue;
+                    if (selectedId.startsWith("block|")) {
+                        // Materialize the generated root row under the folder using the same
+                        // identity so its selection and per-occurrence settings remain attached.
+                        TreeEntry movedRootBlock = new TreeEntry(selectedId, TreeEntryType.BLOCK,
+                                blockId, blockId, id, nextOrder(id), false);
+                        TREE_ENTRIES.put(selectedId, movedRootBlock);
+                    } else {
+                        // A generated selector row is copied; the selector keeps its live member.
+                        copyBlockNode(blockId, selectedId, id);
+                    }
                 }
             }
         }
@@ -536,6 +628,18 @@ public final class ConfigStore {
             if (selected.contains(parentId)) return true;
             TreeEntry parent = TREE_ENTRIES.get(parentId);
             parentId = parent == null ? null : parent.parentId();
+        }
+        return false;
+    }
+
+    /** True when a container itself or one of its containing directories is selected. */
+    private static boolean isSelectedOrHasSelectedAncestor(String entryId,
+                                                             java.util.Set<String> selected) {
+        String cursor = entryId;
+        while (cursor != null) {
+            if (selected.contains(cursor)) return true;
+            TreeEntry entry = TREE_ENTRIES.get(cursor);
+            cursor = entry == null ? null : entry.parentId();
         }
         return false;
     }
