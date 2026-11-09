@@ -78,14 +78,13 @@ public final class MainConfigScreen extends Screen {
                 : ConfigStore.touchTreeEntry(selectedEntryId, this.selectedBlockId);
         if (selected != null) {
             this.selectedEntryId = selected.id();
-            lastSelectedEntryId = selected.id();
         } else {
-            this.selectedEntryId = null;
-            lastSelectedEntryId = null;
+            // A not-yet-listed block gets a stable occurrence key. It is promoted into
+            // the saved tree only when the player actually changes its settings.
+            this.selectedEntryId = "block|" + this.selectedBlockId;
         }
-        this.config = this.selectedEntryId == null
-                ? ConfigStore.get(this.selectedBlockId)
-                : ConfigStore.get(this.selectedBlockId, this.selectedEntryId);
+        lastSelectedEntryId = this.selectedEntryId;
+        this.config = ConfigStore.get(this.selectedBlockId, this.selectedEntryId);
     }
 
     @Override
@@ -372,9 +371,9 @@ public final class MainConfigScreen extends Screen {
             lastSelectedEntryId = selectedEntryId;
             config = ConfigStore.get(id, selectedEntryId);
         } else {
-            selectedEntryId = null;
-            lastSelectedEntryId = null;
-            config = ConfigStore.get(id);
+            selectedEntryId = "block|" + id;
+            lastSelectedEntryId = selectedEntryId;
+            config = ConfigStore.get(id, selectedEntryId);
         }
         // Updating the text to the selected block is not a user edit and must not reopen autocomplete.
         suppressSuggestionActivation = true;

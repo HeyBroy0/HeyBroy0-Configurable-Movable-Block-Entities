@@ -321,7 +321,14 @@ public final class ConfigStore {
                 parentId, nextOrder(parentId), false));
 
         BlockConfig source = BLOCKS.get(sourceEntryId);
-        if (source == null) source = BLOCKS.get(blockId);
+        if (source == null) {
+            TreeEntry topmost = findTopmostBlockEntry(blockId);
+            // Claim a legacy block-wide record only when the selected occurrence currently
+            // has precedence. A lower-priority duplicate must not inherit another copy's settings.
+            if (topmost != null && topmost.id().equals(sourceEntryId)) {
+                source = BLOCKS.remove(blockId);
+            }
+        }
         if (source != null) BLOCKS.put(id, source.copyFor(blockId));
     }
 
@@ -480,6 +487,19 @@ public final class ConfigStore {
 
     public static synchronized void save() {
         load();
+        // Persist implicit root occurrences only after they acquire non-default settings.
+        for (Map.Entry<String, BlockConfig> block : BLOCKS.entrySet()) {
+            String entryId = block.getKey();
+            BlockConfig config = block.getValue();
+            if (!config.isChanged() || !entryId.startsWith("block|") || TREE_ENTRIES.containsKey(entryId)) {
+                continue;
+            }
+            String blockId = config.blockId;
+            if (blockId != null && !blockId.isBlank()) {
+                TREE_ENTRIES.put(entryId, new TreeEntry(entryId, TreeEntryType.BLOCK,
+                        blockId, blockId, null, topOrder(null), false));
+            }
+        }
         Properties properties = new Properties();
         properties.setProperty("format.version", "3");
         BLOCKS.forEach((id, config) -> {
