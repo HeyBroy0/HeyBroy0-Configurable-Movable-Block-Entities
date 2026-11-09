@@ -1,8 +1,10 @@
 package com.heybroy0.movableblockentities.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
@@ -36,6 +38,10 @@ public final class AdhesionEditorScreen extends Screen {
         clearWidgets();
         left = (width - PANEL_WIDTH) / 2;
         top = Math.max(8, (height - PANEL_HEIGHT) / 2);
+
+        // Keep navigation in the header so it remains visible at reduced GUI scales.
+        addButton("Back", Math.max(8, left + 12), top + 8, 72, 22,
+                button -> returnToMain());
 
         geometryButton = addButton("", left + 255, top + 86, 220, 22, button -> {
             GeometrySource[] values = GeometrySource.values();
@@ -89,11 +95,22 @@ public final class AdhesionEditorScreen extends Screen {
             }
         }
 
-        addButton("Back", left + 20, top + PANEL_HEIGHT - 42, 110, 22,
-                button -> minecraft.gui.setScreen(new MainConfigScreen(blockId)));
         addButton("Done", left + PANEL_WIDTH - 130, top + PANEL_HEIGHT - 42, 110, 22,
-                button -> minecraft.gui.setScreen(new MainConfigScreen(blockId)));
+                button -> returnToMain());
         refreshLabels();
+    }
+
+    private void returnToMain() {
+        minecraft.gui.setScreen(new MainConfigScreen(blockId));
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
+            returnToMain();
+            return true;
+        }
+        return super.keyPressed(event);
     }
 
     private Button addButton(String label, int x, int y, int w, int h, Button.OnPress action) {
