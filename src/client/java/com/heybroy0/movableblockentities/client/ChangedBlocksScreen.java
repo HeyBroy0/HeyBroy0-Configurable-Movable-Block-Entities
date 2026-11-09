@@ -268,19 +268,22 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (bulkMode || event.hasShiftDown()) {
             if (event.hasShiftDown()) {
+                if (rangeAnchor < 0 || rangeAnchor >= visibleRows.size()) rangeAnchor = rowIndex;
                 bulkMode = true;
                 selectRange(rowIndex);
                 refreshToolbar();
             } else {
                 toggleSelection(entry);
+                rangeAnchor = rowIndex;
             }
-            rangeAnchor = rowIndex;
             return;
         }
 
+        // A single click selects the name; double-click opens a block or expands a container.
         activeEntryId = entry.id();
+        rangeAnchor = rowIndex;
         if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
-            minecraft.gui.setScreen(new MainConfigScreen(entry.value()));
+            if (doubleClick) minecraft.gui.setScreen(new MainConfigScreen(entry.value()));
         } else {
             entryDraft = entry.name();
             if (entryNameBox != null) entryNameBox.setValue(entryDraft);
@@ -304,6 +307,16 @@ public final class ChangedBlocksScreen extends Screen {
             case SELECTOR -> entry.name().startsWith("#") ? entry.name() : "#" + entry.value();
             case BLOCK -> entry.value();
         };
+    }
+
+    private String fitText(String value, int maxWidth) {
+        if (maxWidth <= 0) return "";
+        String text = value;
+        while (!text.isEmpty() && font.width(text) > maxWidth) {
+            if (text.length() <= 4) return "";
+            text = text.substring(0, text.length() - 4) + "...";
+        }
+        return text;
     }
 
     private void renderTree(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -338,7 +351,8 @@ public final class ChangedBlocksScreen extends Screen {
                 graphics.text(font, selected ? "[x]" : "[ ]", textX, y + 3, selected ? 0xFF86D99B : 0xFFADB6C0);
                 textX += 22;
             }
-            graphics.text(font, entryLabel(entry), textX, y + 3,
+            int labelWidth = treeRight - textX - (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode ? 20 : 5);
+            graphics.text(font, fitText(entryLabel(entry), labelWidth), textX, y + 3,
                     entry.type() == ConfigStore.TreeEntryType.SELECTOR ? 0xFF8FC7E8 : 0xFFE4E8EC);
             if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
                 graphics.text(font, "x", treeRight - 13, y + 3, 0xFFDA8888);
@@ -362,7 +376,8 @@ public final class ChangedBlocksScreen extends Screen {
             if (visible - selectionScrollOffset >= maxSelectionRows()) break;
             int y = TREE_Y + 36 + (visible - selectionScrollOffset) * ROW_HEIGHT;
             graphics.fill(x + 4, y, left + PANEL_WIDTH - 22, y + ROW_HEIGHT, 0x552E353D);
-            graphics.text(font, selected.getValue(), x + 8, y + 3, 0xFFE0E5EA);
+            graphics.text(font, fitText(selected.getValue(), left + PANEL_WIDTH - x - 38),
+                    x + 8, y + 3, 0xFFE0E5EA);
             visible++;
         }
         graphics.text(font, "Click item to remove", x + 6, TREE_BOTTOM - 13, 0xFF84909B);
@@ -392,6 +407,10 @@ public final class ChangedBlocksScreen extends Screen {
                 + "  ·  " + ConfigStore.changedBlockIds().size() + " changed blocks",
                 left + 18, top + 92, 0xFFB7C0C9);
 
+        if (visibleRows.isEmpty()) {
+            graphics.centeredText(font, "No changed blocks or saved folders yet.",
+                    left + (bulkMode ? 180 : PANEL_WIDTH / 2), top + 190, 0xFF9FA8B2);
+        }
         renderTree(graphics, logicalMouseX, logicalMouseY);
         if (bulkMode) renderSelectionSidebar(graphics);
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
