@@ -2,22 +2,57 @@ package com.heybroy0.movableblockentities.client;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-/** Small scroll-by-page view of blocks with non-default saved GUI values. */
+/**
+ * Hierarchical view of changed blocks, reusable block-tag selectors and user folders.
+ * Root entries remain paged; expanded children are kept on the same page and scroll in-place.
+ */
 public final class ChangedBlocksScreen extends Screen {
     private static final int PANEL_WIDTH = 520;
     private static final int PANEL_HEIGHT = 350;
     private static final int PAGE_SIZE = 6;
+    private static final int ROW_HEIGHT = 16;
+    private static final int TOOLBAR_Y = 43;
+    private static final int EDIT_Y = 68;
+    private static final int TREE_X = 18;
+    private static final int TREE_Y = 105;
+    private static final int TREE_BOTTOM = 304;
+    private static final int FOOTER_Y = 314;
+
     private final String returnBlock;
+    private final Map<String, String> selectedItems = new LinkedHashMap<>();
     private int page;
+    private int treeScrollOffset;
+    private int selectionScrollOffset;
     private int left;
     private int top;
-    private List<String> changed;
+    private int hoveredRow = -1;
+    private int rangeAnchor = -1;
+    private int listWidth = 480;
+    private boolean bulkMode;
+    private String activeEntryId;
+    private String entryDraft = "";
+
+    private EditBox entryNameBox;
+    private Button folderButton;
+    private Button selectorButton;
+    private Button renameButton;
+    private Button bulkButton;
+    private Button previousButton;
+    private Button nextButton;
+    private Button backButton;
+    private List<VisibleRow> visibleRows = List.of();
+    private List<ConfigStore.TreeEntry> roots = List.of();
 
     public ChangedBlocksScreen(String returnBlock, int page) {
         super(Component.literal("Changed Blocks"));
@@ -30,32 +65,307 @@ public final class ChangedBlocksScreen extends Screen {
         clearWidgets();
         left = 0;
         top = 0;
-        changed = ConfigStore.changedBlockIds();
-        int pages = Math.max(1, (changed.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        page = Math.min(page, pages - 1);
 
+        roots = ConfigStore.rootEntries();
+        int pageCount = pageCount();
+        page = Math.max(0, Math.min(page, pageCount - 1));
+        rebuildVisibleRows();
+
+        folderButton = addButton("New folder", left + 18, top + TOOLBAR_Y, 88, 20,
+                button -> createFolder());
+        selectorButton = addButton("Add selector", left + 110, top + TOOLBAR_Y, 92, 20,
+                button -> addSelector());
+        renameButton = addButton("Rename", left + 206, top + TOOLBAR_Y, 66, 20,
+                button -> renameSelected());
+        bulkButton = addButton(bulkMode ? "Done selecting" : "Bulk select",
+                left + 276, top + TOOLBAR_Y, 104, 20, button -> {
+                    bulkMode = !bulkMode;
+                    hoveredRow = -1;
+                    rebuildVisibleRows();
+                    refreshToolbar();
+                });
+
+        entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
+                Component.literal("Folder name or block tag"));
+        entryNameBox.setMaxLength(120);
+        entryNameBox.setBordered(true);
+        entryNameBox.setHint(Component.literal("Folder name or #namespace:tag"));
+        entryNameBox.setValue(entryDraft);
+        entryNameBox.setResponder(value -> entryDraft = value);
+        addRenderableWidget(entryNameBox);
+
+        previousButton = addButton("‹ Previous", left + 18, top + FOOTER_Y, 100, 20, button -> {
+            page = Math.max(0, page - 1);
+            treeScrollOffset = 0;
+            init();
+        });
+        nextButton = addButton("Next ›", left + 126, top + FOOTER_Y, 85, 20, button -> {
+            page = Math.min(pageCount() - 1, page + 1);
+            treeScrollOffset = 0;
+            init();
+        });
+        backButton = addButton("Back", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
+                button -> minecraft.gui.setScreen(new MainConfigScreen(returnBlock)));
+
+        refreshToolbar();
+    }
+
+    private Button addButton(String label, int x, int y, int width, int height, Button.OnPress action) {
+        return addRenderableWidget(Button.builder(Component.literal(label), action)
+                .bounds(x, y, width, height).build());
+    }
+
+    private int pageCount() {
+        return Math.max(1, (roots.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+    }
+
+    private void refreshToolbar() {
+        if (renameButton == null) return;
+        boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId);
+        renameButton.visible = canRename;
+        renameButton.active = canRename;
+        bulkButton.setMessage(Component.literal(bulkMode ? "Done selecting" : "Bulk select"));
+        previousButton.active = page > 0;
+        nextButton.active = page < pageCount() - 1;
+    }
+
+    private String activeFolderParent() {
+        if (bulkMode) return null;
+        ConfigStore.TreeEntry selected = ConfigStore.findTreeEntry(activeEntryId);
+        return selected != null && selected.type() == ConfigStore.TreeEntryType.FOLDER
+                ? selected.id() : null;
+    }
+
+    private void createFolder() {
+        String name = entryDraft.trim();
+        List<String> ids = new ArrayList<>(selectedItems.keySet());
+        ConfigStore.createFolder(name, activeFolderParent(), ids);
+        selectedItems.clear();
+        activeEntryId = null;
+        entryDraft = "";
+        bulkMode = false;
+        treeScrollOffset = 0;
+        page = 0;
+        init();
+    }
+
+    private void addSelector() {
+        String raw = entryDraft.trim();
+        if (raw.startsWith("#")) raw = raw.substring(1);
+        if (!ConfigStore.isBlockTag(raw)) return;
+        ConfigStore.addBlockSelector(raw, activeFolderParent());
+        entryDraft = "";
+        page = 0;
+        treeScrollOffset = 0;
+        init();
+    }
+
+    private void renameSelected() {
+        if (!ConfigStore.isUserTreeEntry(activeEntryId)) return;
+        String name = entryDraft.trim();
+        if (name.isBlank()) return;
+        ConfigStore.renameTreeEntry(activeEntryId, name);
+        entryDraft = "";
+        init();
+    }
+
+    private void rebuildVisibleRows() {
         int start = page * PAGE_SIZE;
-        int end = Math.min(changed.size(), start + PAGE_SIZE);
+        int end = Math.min(roots.size(), start + PAGE_SIZE);
+        List<VisibleRow> flattened = new ArrayList<>();
         for (int i = start; i < end; i++) {
-            String id = changed.get(i);
-            int rowY = top + 72 + (i - start) * 36;
-            addRenderableWidget(Button.builder(Component.literal("Focus"), button ->
-                    minecraft.gui.setScreen(new MainConfigScreen(id))).bounds(left + 345, rowY, 72, 22).build());
-            addRenderableWidget(Button.builder(Component.literal("Revert"), button -> {
-                ConfigStore.revert(id);
-                minecraft.gui.setScreen(new ChangedBlocksScreen(returnBlock, page));
-            }).bounds(left + 425, rowY, 75, 22).build());
+            ConfigStore.TreeEntry root = roots.get(i);
+            appendRows(flattened, root, 0, i == end - 1, List.of());
+        }
+        visibleRows = List.copyOf(flattened);
+        int visibleCount = maxVisibleRows();
+        treeScrollOffset = Math.max(0, Math.min(treeScrollOffset,
+                Math.max(0, visibleRows.size() - visibleCount)));
+        selectionScrollOffset = Math.max(0, Math.min(selectionScrollOffset,
+                Math.max(0, selectedItems.size() - maxSelectionRows())));
+    }
+
+    private void appendRows(List<VisibleRow> rows, ConfigStore.TreeEntry entry,
+                            int depth, boolean last, List<Boolean> ancestorLastFlags) {
+        StringBuilder connector = new StringBuilder();
+        for (boolean ancestorWasLast : ancestorLastFlags) {
+            connector.append(ancestorWasLast ? "   " : "|  ");
+        }
+        if (depth > 0) connector.append(last ? "`- " : "|- ");
+        rows.add(new VisibleRow(entry, depth, connector.toString()));
+
+        if (!entry.expanded() || entry.type() == ConfigStore.TreeEntryType.BLOCK) return;
+        List<ConfigStore.TreeEntry> children = ConfigStore.childrenOf(entry);
+        for (int i = 0; i < children.size(); i++) {
+            List<Boolean> childFlags = new ArrayList<>(ancestorLastFlags);
+            childFlags.add(last);
+            appendRows(rows, children.get(i), depth + 1, i == children.size() - 1, childFlags);
+        }
+    }
+
+    private int maxVisibleRows() {
+        return Math.max(1, (TREE_BOTTOM - TREE_Y) / ROW_HEIGHT);
+    }
+
+    private int maxSelectionRows() {
+        return Math.max(1, (TREE_BOTTOM - TREE_Y - 34) / ROW_HEIGHT);
+    }
+
+    private int visibleTreeRowAt(double mouseY) {
+        int row = (int) ((mouseY - TREE_Y) / ROW_HEIGHT) + treeScrollOffset;
+        return row >= treeScrollOffset && row < Math.min(visibleRows.size(),
+                treeScrollOffset + maxVisibleRows()) ? row : -1;
+    }
+
+    private void selectRange(int targetIndex) {
+        if (visibleRows.isEmpty() || targetIndex < 0 || targetIndex >= visibleRows.size()) return;
+        if (rangeAnchor < 0 || rangeAnchor >= visibleRows.size()) {
+            rangeAnchor = targetIndex;
+        }
+        int start = Math.min(rangeAnchor, targetIndex);
+        int end = Math.max(rangeAnchor, targetIndex);
+        for (int i = start; i <= end; i++) {
+            ConfigStore.TreeEntry entry = visibleRows.get(i).entry();
+            selectedItems.put(entry.id(), entry.name());
+        }
+    }
+
+    private void toggleSelection(ConfigStore.TreeEntry entry) {
+        if (selectedItems.containsKey(entry.id())) {
+            selectedItems.remove(entry.id());
+        } else {
+            selectedItems.put(entry.id(), entry.name());
+        }
+    }
+
+    private boolean hasChildren(ConfigStore.TreeEntry entry) {
+        if (entry.type() == ConfigStore.TreeEntryType.BLOCK) return false;
+        return !ConfigStore.childrenOf(entry).isEmpty();
+    }
+
+    private void handleTreeClick(MouseButtonEvent event, boolean doubleClick, double x, double y) {
+        int rowIndex = visibleTreeRowAt(y);
+        if (rowIndex < 0) return;
+        VisibleRow row = visibleRows.get(rowIndex);
+        ConfigStore.TreeEntry entry = row.entry();
+        int rowY = TREE_Y + (rowIndex - treeScrollOffset) * ROW_HEIGHT;
+        int disclosureX = TREE_X + 4 + row.depth() * 12;
+        int rowEnd = TREE_X + listWidth;
+
+        if (event.button() != 1) return;
+        if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
+            ConfigStore.toggleExpanded(entry.id());
+            refreshTree();
+            return;
         }
 
-        addRenderableWidget(Button.builder(Component.literal("‹ Previous"), button ->
-                minecraft.gui.setScreen(new ChangedBlocksScreen(returnBlock, Math.max(0, page - 1))))
-                .bounds(left + 20, top + PANEL_HEIGHT - 42, 105, 22).build());
-        addRenderableWidget(Button.builder(Component.literal("Next ›"), button ->
-                minecraft.gui.setScreen(new ChangedBlocksScreen(returnBlock, page + 1)))
-                .bounds(left + 135, top + PANEL_HEIGHT - 42, 90, 22).build());
-        addRenderableWidget(Button.builder(Component.literal("Back"), button ->
-                minecraft.gui.setScreen(new MainConfigScreen(returnBlock)))
-                .bounds(left + PANEL_WIDTH - 130, top + PANEL_HEIGHT - 42, 110, 22).build());
+        if (!bulkMode && entry.type() == ConfigStore.TreeEntryType.BLOCK
+                && x >= rowEnd - 17) {
+            ConfigStore.revert(entry.value());
+            refreshTree();
+            return;
+        }
+
+        if (bulkMode || event.hasShiftDown()) {
+            if (event.hasShiftDown()) {
+                bulkMode = true;
+                selectRange(rowIndex);
+                refreshToolbar();
+            } else {
+                toggleSelection(entry);
+            }
+            rangeAnchor = rowIndex;
+            return;
+        }
+
+        activeEntryId = entry.id();
+        if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
+            minecraft.gui.setScreen(new MainConfigScreen(entry.value()));
+        } else {
+            entryDraft = entry.name();
+            if (entryNameBox != null) entryNameBox.setValue(entryDraft);
+            if (doubleClick) {
+                ConfigStore.toggleExpanded(entry.id());
+                refreshTree();
+            }
+            refreshToolbar();
+        }
+    }
+
+    private void refreshTree() {
+        roots = ConfigStore.rootEntries();
+        page = Math.min(page, pageCount() - 1);
+        rebuildVisibleRows();
+    }
+
+    private String entryLabel(ConfigStore.TreeEntry entry) {
+        return switch (entry.type()) {
+            case FOLDER -> "[Folder] " + entry.name();
+            case SELECTOR -> entry.name().startsWith("#") ? entry.name() : "#" + entry.value();
+            case BLOCK -> entry.value();
+        };
+    }
+
+    private void renderTree(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        int treeRight = TREE_X + listWidth;
+        graphics.fill(TREE_X - 2, TREE_Y - 2, treeRight, TREE_BOTTOM, 0x7720242A);
+        int count = Math.min(maxVisibleRows(), Math.max(0, visibleRows.size() - treeScrollOffset));
+        for (int visible = 0; visible < count; visible++) {
+            int index = treeScrollOffset + visible;
+            VisibleRow row = visibleRows.get(index);
+            ConfigStore.TreeEntry entry = row.entry();
+            int y = TREE_Y + visible * ROW_HEIGHT;
+            boolean selected = selectedItems.containsKey(entry.id());
+            boolean active = entry.id().equals(activeEntryId);
+            if (index == hoveredRow) {
+                graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0xFF414D5B);
+            } else if (selected || active) {
+                graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0xFF35414D);
+            } else if ((visible & 1) == 1) {
+                graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0x44252B31);
+            }
+
+            int prefixX = TREE_X + 4 + row.depth() * 12;
+            if (row.depth() > 0) {
+                graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
+            }
+            int iconX = TREE_X + 4 + row.depth() * 12;
+            String disclosure = hasChildren(entry) ? (entry.expanded() ? "v" : ">") : " ";
+            graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
+
+            int textX = Math.max(prefixX + 12, TREE_X + 20 + row.depth() * 12);
+            if (bulkMode) {
+                graphics.text(font, selected ? "[x]" : "[ ]", textX, y + 3, selected ? 0xFF86D99B : 0xFFADB6C0);
+                textX += 22;
+            }
+            graphics.text(font, entryLabel(entry), textX, y + 3,
+                    entry.type() == ConfigStore.TreeEntryType.SELECTOR ? 0xFF8FC7E8 : 0xFFE4E8EC);
+            if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
+                graphics.text(font, "x", treeRight - 13, y + 3, 0xFFDA8888);
+            }
+        }
+        graphics.text(font, "Scroll to browse expanded entries", TREE_X, TREE_BOTTOM + 2, 0xFF87919B);
+    }
+
+    private void renderSelectionSidebar(GuiGraphicsExtractor graphics) {
+        int x = TREE_X + listWidth + 8;
+        graphics.fill(x, TREE_Y - 2, left + PANEL_WIDTH - 18, TREE_BOTTOM, 0xCC171B20);
+        graphics.outline(x, TREE_Y - 2, left + PANEL_WIDTH - x - 18, TREE_BOTTOM - TREE_Y + 2, 0xFF4B555F);
+        graphics.text(font, "SELECTED", x + 7, TREE_Y + 5, 0xFFE0E5EA);
+        graphics.text(font, Integer.toString(selectedItems.size()), x + 7, TREE_Y + 19, 0xFF90D5A0);
+        int visible = 0;
+        for (Map.Entry<String, String> selected : selectedItems.entrySet()) {
+            if (visible < selectionScrollOffset) {
+                visible++;
+                continue;
+            }
+            if (visible - selectionScrollOffset >= maxSelectionRows()) break;
+            int y = TREE_Y + 36 + (visible - selectionScrollOffset) * ROW_HEIGHT;
+            graphics.fill(x + 4, y, left + PANEL_WIDTH - 22, y + ROW_HEIGHT, 0x552E353D);
+            graphics.text(font, selected.getValue(), x + 8, y + 3, 0xFFE0E5EA);
+            visible++;
+        }
+        graphics.text(font, "Click item to remove", x + 6, TREE_BOTTOM - 13, 0xFF84909B);
     }
 
     @Override
@@ -74,44 +384,92 @@ public final class ChangedBlocksScreen extends Screen {
         int logicalMouseX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
 
+        listWidth = bulkMode ? 324 : 480;
         graphics.centeredText(font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
-        graphics.text(font, "Only entries that differ from their effective defaults are listed.",
-                left + 22, top + 48, 0xFFBBC3CC);
-        if (changed.isEmpty()) {
-            graphics.centeredText(font, "No changed blocks yet.", left + PANEL_WIDTH / 2, top + 160, 0xFF9FA8B2);
-        } else {
-            int start = page * PAGE_SIZE;
-            int end = Math.min(changed.size(), start + PAGE_SIZE);
-            for (int i = start; i < end; i++) {
-                String id = changed.get(i);
-                int rowY = top + 79 + (i - start) * 36;
-                graphics.fill(left + 18, rowY - 5, left + PANEL_WIDTH - 18, rowY + 25, 0xFF23282E);
-                graphics.text(font, id, left + 30, rowY + 4, 0xFFE5E8EB);
-            }
-            graphics.text(font, "Page " + (page + 1) + " / " + Math.max(1, (changed.size() + PAGE_SIZE - 1) / PAGE_SIZE),
-                    left + 250, top + PANEL_HEIGHT - 35, 0xFF9FA8B2);
-        }
+        graphics.text(font, "Compact tree · folders and selectors stay on their page",
+                left + 18, top + 31, 0xFF9FA8B2);
+        graphics.text(font, "Root page " + (page + 1) + " / " + pageCount()
+                + "  ·  " + ConfigStore.changedBlockIds().size() + " changed blocks",
+                left + 18, top + 92, 0xFFB7C0C9);
+
+        renderTree(graphics, logicalMouseX, logicalMouseY);
+        if (bulkMode) renderSelectionSidebar(graphics);
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
         graphics.pose().popMatrix();
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        return super.mouseClicked(
-                ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT), doubleClick);
+        MouseButtonEvent logical = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        double x = logical.x();
+        double y = logical.y();
+
+        if (x >= TREE_X - 2 && x < TREE_X + listWidth && y >= TREE_Y && y < TREE_BOTTOM) {
+            handleTreeClick(logical, doubleClick, x, y);
+            return true;
+        }
+
+        if (bulkMode) {
+            int sideX = TREE_X + listWidth + 8;
+            if (x >= sideX && x < PANEL_WIDTH - 18 && y >= TREE_Y + 36 && y < TREE_BOTTOM - 14) {
+                int item = (int) ((y - (TREE_Y + 36)) / ROW_HEIGHT) + selectionScrollOffset;
+                if (item >= 0 && item < selectedItems.size()) {
+                    String id = new ArrayList<>(selectedItems.keySet()).get(item);
+                    selectedItems.remove(id);
+                }
+                return true;
+            }
+        }
+
+        return super.mouseClicked(logical, doubleClick);
+    }
+
+    @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        double x = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        double y = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        if (x >= TREE_X && x < TREE_X + listWidth && y >= TREE_Y && y < TREE_BOTTOM) {
+            hoveredRow = visibleTreeRowAt(y);
+        } else {
+            hoveredRow = -1;
+        }
+        super.mouseMoved(x, y);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return super.mouseScrolled(
-                ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT),
-                ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT),
-                scrollX, scrollY);
+        double x = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        double y = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        if (scrollY == 0) return false;
+        if (x >= TREE_X - 2 && x < TREE_X + listWidth && y >= TREE_Y && y < TREE_BOTTOM) {
+            treeScrollOffset = Math.max(0, Math.min(
+                    Math.max(0, visibleRows.size() - maxVisibleRows()),
+                    treeScrollOffset + (scrollY < 0 ? 1 : -1)));
+            return true;
+        }
+        if (bulkMode && x >= TREE_X + listWidth + 8 && x < PANEL_WIDTH - 18
+                && y >= TREE_Y && y < TREE_BOTTOM) {
+            selectionScrollOffset = Math.max(0, Math.min(
+                    Math.max(0, selectedItems.size() - maxSelectionRows()),
+                    selectionScrollOffset + (scrollY < 0 ? 1 : -1)));
+            return true;
+        }
+        return super.mouseScrolled(x, y, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == 41) { // SDL scancode for Escape
+            minecraft.gui.setScreen(new MainConfigScreen(returnBlock));
+            return true;
+        }
+        return super.keyPressed(event);
     }
 
     @Override
     public boolean isPauseScreen() {
         return true;
     }
-}
 
+    private record VisibleRow(ConfigStore.TreeEntry entry, int depth, String connector) {}
+}

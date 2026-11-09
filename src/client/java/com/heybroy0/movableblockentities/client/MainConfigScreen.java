@@ -219,6 +219,20 @@ public final class MainConfigScreen extends Screen {
         }
 
         List<BlockSuggestion> found = new ArrayList<>();
+        if (value.startsWith("#")) {
+            String tagQuery = value.substring(1).trim().toLowerCase(Locale.ROOT);
+            for (String tagId : ConfigStore.blockTagIds(tagQuery)) {
+                int members = ConfigStore.blockTagMembers(tagId).size();
+                found.add(new BlockSuggestion("#" + tagId, "Block selector · " + members + " blocks", true, true));
+            }
+            found.sort(Comparator.comparing(BlockSuggestion::id));
+            suggestions = List.copyOf(found);
+            suggestionScrollOffset = 0;
+            suggestionIndex = 0;
+            hoveredSuggestionIndex = -1;
+            return;
+        }
+
         for (var entry : BuiltInRegistries.BLOCK.entrySet()) {
             String id = entry.getKey().identifier().toString();
             String name = entry.getValue().getName().getString();
@@ -230,7 +244,7 @@ public final class MainConfigScreen extends Screen {
                     || id.toLowerCase(Locale.ROOT).contains(query)
                     || normalizedName.contains(query)) {
                 found.add(new BlockSuggestion(id, name,
-                        id.toLowerCase(Locale.ROOT).startsWith(query) || path.startsWith(query)));
+                        id.toLowerCase(Locale.ROOT).startsWith(query) || path.startsWith(query), false));
             }
         }
         found.sort(Comparator.comparing(BlockSuggestion::prefixMatch).reversed()
@@ -300,11 +314,22 @@ public final class MainConfigScreen extends Screen {
 
     private void chooseSuggestion(int index) {
         if (index < 0 || index >= suggestions.size()) return;
-        chooseBlock(suggestions.get(index).id());
+        BlockSuggestion suggestion = suggestions.get(index);
+        if (suggestion.tag()) {
+            ConfigStore.addBlockSelector(suggestion.id(), null);
+            minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
+            return;
+        }
+        chooseBlock(suggestion.id());
     }
 
     private void chooseExactMatch() {
         String query = searchBox.getValue().trim();
+        if (query.startsWith("#") && ConfigStore.isBlockTag(query.substring(1))) {
+            ConfigStore.addBlockSelector(query.substring(1), null);
+            minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
+            return;
+        }
         Identifier id = Identifier.tryParse(query);
         if (id != null && BuiltInRegistries.BLOCK.containsKey(id)) {
             chooseBlock(id.toString());
@@ -530,6 +555,6 @@ public final class MainConfigScreen extends Screen {
         return true;
     }
 
-    private record BlockSuggestion(String id, String name, boolean prefixMatch) {}
+    private record BlockSuggestion(String id, String name, boolean prefixMatch, boolean tag) {}
 }
 
