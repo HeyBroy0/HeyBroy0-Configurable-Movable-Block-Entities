@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "movable_block_entities",
+  "version": "${version}",
+  "name": "Configurable Movable Block Entities - GUI Prototype",
+  "description": "A navigable configuration GUI prototype. Piston and adhesion mechanics are not implemented in this build.",
+  "authors": ["HeyBroy0"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.heybroy0.movableblockentities.client.MovableBlockEntitiesClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
+

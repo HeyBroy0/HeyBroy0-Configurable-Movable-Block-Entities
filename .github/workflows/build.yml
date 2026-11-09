@@ -1,0 +1,41 @@
+name: Build GUI prototype
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "25"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build mod jar
+        run: ./gradlew --no-daemon clean build
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: movable-block-entities-gui-26.3
+          path: build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
