@@ -16,6 +16,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -30,6 +31,10 @@ import java.util.UUID;
 public final class ConfigStore {
     private static final Map<String, BlockConfig> BLOCKS = new TreeMap<>();
     private static final Map<String, TreeEntry> TREE_ENTRIES = new LinkedHashMap<>();
+    private static volatile Map<String, EffectiveBlockConfig> BEHAVIOR_CACHE = Map.of();
+    private static volatile long behaviorCacheGeneration;
+    private static final EffectiveBlockConfig DEFAULT_BEHAVIOR_CONFIG =
+            new BlockConfig().snapshot(null);
     private static final Path FILE = FabricLoader.getInstance().getConfigDir()
             .resolve("movable-block-entities")
             .resolve("settings.properties");
@@ -488,6 +493,63 @@ public final class ConfigStore {
         return "tagblock|" + selectorId + "|" + blockId;
     }
 
+    /**
+     * Rebuilds the immutable, runtime-facing block behavior snapshot from the current ordered tree.
+     * This is intentionally an explicit operation: runtime checks only perform a map lookup and
+     * never traverse the user-editable hierarchy.
+     */
+    public static synchronized void rebuildBehaviorCache() {
+        load();
+        Map<String, EffectiveBlockConfig> rebuilt = new LinkedHashMap<>();
+        for (TreeEntry root : rootEntries()) {
+            collectEffectiveConfigs(root, rebuilt);
+        }
+
+        // Preserve old block-wide entries that do not yet have an occurrence in the tree.
+        BLOCKS.forEach((key, config) -> {
+            String blockId = config.blockId;
+            if ((blockId == null || blockId.isBlank())
+                    && !key.startsWith("block|") && !key.startsWith("tagblock|")
+                    && !key.startsWith("node-")) {
+                blockId = key;
+            }
+            if (blockId != null && !blockId.isBlank()) {
+                rebuilt.putIfAbsent(blockId, config.snapshot(key));
+            }
+        });
+
+        BEHAVIOR_CACHE = Collections.unmodifiableMap(rebuilt);
+        behaviorCacheGeneration++;
+    }
+
+    private static void collectEffectiveConfigs(TreeEntry entry,
+                                                Map<String, EffectiveBlockConfig> destination) {
+        if (entry.type() == TreeEntryType.BLOCK) {
+            BlockConfig config = BLOCKS.get(entry.id());
+            if (config == null && !destination.containsKey(entry.value())) {
+                // Legacy block-wide settings are inherited only by the first occurrence.
+                config = BLOCKS.get(entry.value());
+            }
+            destination.putIfAbsent(entry.value(),
+                    config == null ? DEFAULT_BEHAVIOR_CONFIG.withSource(entry.id())
+                            : config.snapshot(entry.id()));
+            return;
+        }
+
+        for (TreeEntry child : childrenOf(entry)) {
+            collectEffectiveConfigs(child, destination);
+        }
+    }
+
+    /** O(1) runtime lookup. The returned value is immutable and safe to read on tick threads. */
+    public static EffectiveBlockConfig getRuntimeConfig(String blockId) {
+        return BEHAVIOR_CACHE.getOrDefault(blockId, DEFAULT_BEHAVIOR_CONFIG);
+    }
+
+    public static long getBehaviorCacheGeneration() {
+        return behaviorCacheGeneration;
+    }
+
     /** Reverts one occurrence without deleting any other copy of the same block. */
     public static synchronized void revertInstance(String blockId, String entryId) {
         load();
@@ -600,6 +662,29 @@ public final class ConfigStore {
         }
     }
 
+    public record EffectiveBlockConfig(
+            Movement movement,
+            ScheduledTicks scheduledTicks,
+            int pushCost,
+            Adhesion adhesion,
+            GeometrySource geometrySource,
+            int minimumSquare,
+            int depth,
+            Orientation orientation,
+            String leadDirection,
+            Map<Face, Boolean> faces,
+            String sourceEntryId
+    ) {
+        public EffectiveBlockConfig {
+            faces = Map.copyOf(faces);
+        }
+
+        public EffectiveBlockConfig withSource(String source) {
+            return new EffectiveBlockConfig(movement, scheduledTicks, pushCost, adhesion,
+                    geometrySource, minimumSquare, depth, orientation, leadDirection, faces, source);
+        }
+    }
+
     public enum Movement { VANILLA, MOVABLE, BREAKABLE, IMMOVABLE }
     public enum ScheduledTicks { VANILLA, TRANSFER, DUPLICATE }
     public enum Adhesion { VANILLA, ADHESIVE, GLAZED, HITBOX, ADVANCED }
@@ -622,6 +707,12 @@ public final class ConfigStore {
 
         public BlockConfig() {
             for (Face face : Face.values()) faces.put(face, false);
+        }
+
+        public EffectiveBlockConfig snapshot(String sourceEntryId) {
+            return new EffectiveBlockConfig(movement, scheduledTicks, pushCost, adhesion,
+                    geometrySource, minimumSquare, depth, orientation, leadDirection,
+                    faces, sourceEntryId);
         }
 
         public BlockConfig copyFor(String newBlockId) {

@@ -138,7 +138,7 @@ public final class MainConfigScreen extends Screen {
         addButton("Changed blocks", left + 20, top + 307, 190, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0)));
         addButton("Done", left + PANEL_WIDTH - 135, top + 307, 115, 22,
-                button -> minecraft.gui.setScreen(null));
+                button -> closeConfiguration());
 
         refreshControlLabels();
         // Keep the screen's focus manager and the text field in sync (also starts SDL text input).
@@ -399,8 +399,23 @@ public final class MainConfigScreen extends Screen {
         minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId, page));
     }
 
+    private void closeConfiguration() {
+        ConfigStore.rebuildBehaviorCache();
+        minecraft.gui.setScreen(null);
+    }
+
+    @Override
+    public void onClose() {
+        ConfigStore.rebuildBehaviorCache();
+        super.onClose();
+    }
+
     @Override
     public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
+            closeConfiguration();
+            return true;
+        }
         if (searchBox != null && searchBox.isFocused()) {
             if (event.hasControlDown()) {
                 if (event.key() == InputConstants.KEY_Z) {

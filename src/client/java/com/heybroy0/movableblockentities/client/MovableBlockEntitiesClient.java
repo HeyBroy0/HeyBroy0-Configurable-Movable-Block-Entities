@@ -20,6 +20,7 @@ public final class MovableBlockEntitiesClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ConfigStore.load();
+        ConfigStore.rebuildBehaviorCache();
         KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "controls"));
         openConfiguration = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.movable_block_entities.open_config",
