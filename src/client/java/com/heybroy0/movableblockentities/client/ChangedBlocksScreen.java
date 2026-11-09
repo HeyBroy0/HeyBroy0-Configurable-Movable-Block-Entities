@@ -104,14 +104,14 @@ public final class ChangedBlocksScreen extends Screen {
                     rebuildVisibleRows();
                     refreshToolbar();
                 });
-        deleteButton = addButton("✕", left + 206, top + TOOLBAR_Y, 26, 20,
+        deleteButton = addButton("❌", left + 206, top + TOOLBAR_Y, 26, 20,
                 "Delete selected entries / revert blocks", button -> deleteSelectedEntries());
-        copyButton = addButton("⧉", left + 236, top + TOOLBAR_Y, 26, 20,
-                "Copy selected entries", button -> copySelectedEntries());
-        undoButton = addButton("↶", left + 266, top + TOOLBAR_Y, 26, 20,
+        undoButton = addButton("↶", left + 236, top + TOOLBAR_Y, 26, 20,
                 "Undo last edit", button -> runUndo());
-        redoButton = addButton("↷", left + 296, top + TOOLBAR_Y, 26, 20,
+        redoButton = addButton("↷", left + 266, top + TOOLBAR_Y, 26, 20,
                 "Redo last undone edit", button -> runRedo());
+        copyButton = addButton("⧉", left + 296, top + TOOLBAR_Y, 26, 20,
+                "Copy selected entries", button -> copySelectedEntries());
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
                 Component.literal("Search changed blocks"));
@@ -284,6 +284,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (ConfigStore.redo()) {
             selectedItems.clear();
             activeEntryId = null;
+            activeEntrySnapshot = null;
             rangeAnchor = -1;
             refreshTree();
             refreshToolbar();
@@ -488,6 +489,7 @@ public final class ChangedBlocksScreen extends Screen {
             // Bulk selection is not activation and must not reorder the tree.
             refreshTree();
             rangeAnchor = findVisibleRowIndex(entry.id());
+            refreshToolbar();
             return;
         }
 
@@ -501,6 +503,7 @@ public final class ChangedBlocksScreen extends Screen {
         dragging = false;
         dragTargetIndex = -1;
         rangeAnchor = rowIndex;
+        refreshToolbar();
 
         if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
             if (doubleClick) {
