@@ -116,7 +116,14 @@ public final class ConfigStore {
                     + " unreachable tree entr" + (recoveredEntries == 1 ? "y" : "ies")
                     + " by restoring their directory paths to the root.");
             // Persist the repaired hierarchy immediately so it remains accessible on next launch.
-            save();
+            // Treat recovery as a load-time repair, not as a user-editable undo operation.
+            replayingHistory = true;
+            try {
+                save();
+            } finally {
+                replayingHistory = false;
+            }
+            resetHistoryBaseline();
         }
     }
 
