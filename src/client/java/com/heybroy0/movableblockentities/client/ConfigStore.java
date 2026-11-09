@@ -427,6 +427,130 @@ public final class ConfigStore {
         return top;
     }
 
+
+    /**
+     * Applies a deliberate drag-and-drop operation. Dropping on a folder nests the entry;
+     * dropping above or below a row reorders siblings; dropping in empty tree space moves
+     * the entry to the root. Tag-derived selector members are copied so their live selector
+     * membership remains intact.
+     */
+    public static synchronized boolean moveTreeEntry(TreeEntry sourceSnapshot, TreeEntry targetSnapshot,
+                                                      boolean intoTarget, boolean afterTarget) {
+        load();
+        if (sourceSnapshot == null) return false;
+
+        String destinationParent = intoTarget && targetSnapshot != null
+                && targetSnapshot.type() == TreeEntryType.FOLDER
+                ? targetSnapshot.id()
+                : targetSnapshot == null ? null : targetSnapshot.parentId();
+
+        if (intoTarget && (targetSnapshot == null || targetSnapshot.type() != TreeEntryType.FOLDER)) {
+            return false;
+        }
+        if (destinationParent != null) {
+            TreeEntry parent = TREE_ENTRIES.get(destinationParent);
+            if (parent == null || (parent.type() != TreeEntryType.FOLDER
+                    && parent.type() != TreeEntryType.SELECTOR)) return false;
+        }
+
+        TreeEntry source = TREE_ENTRIES.get(sourceSnapshot.id());
+        boolean selectorMember = sourceSnapshot.id().startsWith("tagblock|");
+        boolean copySelectorMember = selectorMember
+                && !Objects.equals(sourceSnapshot.parentId(), destinationParent);
+
+        if (source == null && sourceSnapshot.type() == TreeEntryType.BLOCK && !copySelectorMember) {
+            source = new TreeEntry(sourceSnapshot.id(), TreeEntryType.BLOCK,
+                    sourceSnapshot.name(), sourceSnapshot.value(), sourceSnapshot.parentId(),
+                    sourceSnapshot.order(), false);
+            TREE_ENTRIES.put(source.id(), source);
+        }
+
+        if (copySelectorMember) {
+            String newId = "node-" + UUID.randomUUID();
+            source = new TreeEntry(newId, TreeEntryType.BLOCK,
+                    sourceSnapshot.name(), sourceSnapshot.value(), destinationParent,
+                    nextOrder(destinationParent), false);
+            TREE_ENTRIES.put(newId, source);
+            BlockConfig selectorConfig = BLOCKS.get(sourceSnapshot.id());
+            if (selectorConfig != null) {
+                BLOCKS.put(newId, selectorConfig.copyFor(sourceSnapshot.value()));
+            }
+        } else if (source == null) {
+            return false;
+        }
+
+        if (targetSnapshot != null) {
+            if (targetSnapshot.id().equals(sourceSnapshot.id())) return false;
+            if (!TREE_ENTRIES.containsKey(targetSnapshot.id())
+                    && targetSnapshot.type() == TreeEntryType.BLOCK) {
+                TREE_ENTRIES.put(targetSnapshot.id(), targetSnapshot);
+            }
+        }
+
+        if (source.type() != TreeEntryType.BLOCK && destinationParent != null
+                && (destinationParent.equals(source.id())
+                || isDescendantOf(source.id(), destinationParent))) {
+            return false;
+        }
+
+        if (copySelectorMember) {
+            // The source remains a generated or materialized child of its selector.
+            // Only the new copy participates in the destination move.
+            source = TREE_ENTRIES.get(source.id());
+        } else {
+            source = source.withParent(destinationParent, nextOrder(destinationParent));
+            TREE_ENTRIES.put(source.id(), source);
+        }
+
+        if (intoTarget) {
+            TREE_ENTRIES.put(source.id(), source.withParent(destinationParent, nextOrder(destinationParent)));
+        } else {
+            reorderSiblings(destinationParent, source.id(),
+                    targetSnapshot == null ? null : targetSnapshot.id(),
+                    afterTarget);
+        }
+        save();
+        return true;
+    }
+
+    /** Makes implicit rows persistent only when a drag operation needs an explicit order. */
+    private static void reorderSiblings(String parentId, String movingId,
+                                        String targetId, boolean afterTarget) {
+        List<TreeEntry> siblings;
+        if (parentId == null) {
+            siblings = new ArrayList<>(rootEntries());
+        } else {
+            TreeEntry parent = TREE_ENTRIES.get(parentId);
+            siblings = parent == null ? new ArrayList<>() : new ArrayList<>(childrenOf(parent));
+        }
+
+        for (TreeEntry sibling : siblings) {
+            if (!TREE_ENTRIES.containsKey(sibling.id()) && sibling.type() == TreeEntryType.BLOCK) {
+                TREE_ENTRIES.put(sibling.id(), sibling);
+            }
+        }
+
+        List<String> orderedIds = new ArrayList<>();
+        for (TreeEntry sibling : siblings) orderedIds.add(sibling.id());
+        if (!orderedIds.contains(movingId)) orderedIds.add(movingId);
+        orderedIds.remove(movingId);
+
+        int insertionIndex = orderedIds.size();
+        if (targetId != null) {
+            int targetIndex = orderedIds.indexOf(targetId);
+            if (targetIndex >= 0) insertionIndex = targetIndex + (afterTarget ? 1 : 0);
+        }
+        insertionIndex = Math.max(0, Math.min(orderedIds.size(), insertionIndex));
+        orderedIds.add(insertionIndex, movingId);
+
+        for (int i = 0; i < orderedIds.size(); i++) {
+            TreeEntry sibling = TREE_ENTRIES.get(orderedIds.get(i));
+            if (sibling != null) {
+                TREE_ENTRIES.put(sibling.id(), sibling.withParent(parentId, i * 10));
+            }
+        }
+    }
+
     public static synchronized TreeEntry findTopmostBlockEntry(String blockId) {
         load();
         List<TreeEntry> roots = rootEntries();

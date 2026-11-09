@@ -22,7 +22,7 @@ import java.util.Map;
 public final class ChangedBlocksScreen extends Screen {
     private static final int PANEL_WIDTH = 520;
     private static final int PANEL_HEIGHT = 350;
-    private static final int PAGE_SIZE = 6;
+    private static final int PAGE_SIZE = 12;
     private static final int ROW_HEIGHT = 16;
     private static final int TOOLBAR_Y = 43;
     private static final int EDIT_Y = 68;
@@ -43,6 +43,13 @@ public final class ChangedBlocksScreen extends Screen {
     private int listWidth = 480;
     private boolean bulkMode;
     private String bulkParentId;
+    private ConfigStore.TreeEntry pressedEntry;
+    private double pressStartX;
+    private double pressStartY;
+    private boolean dragging;
+    private int dragTargetIndex = -1;
+    private boolean dragIntoFolder;
+    private boolean dragAfterTarget;
     private String activeEntryId;
     private String entryDraft = "";
 
@@ -288,11 +295,12 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (event.button() != 1) return;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
-            ConfigStore.touchTreeEntry(entry.id(), entry.type() == ConfigStore.TreeEntryType.BLOCK
-                    ? entry.value() : null);
+            activeEntryId = entry.id();
             ConfigStore.toggleExpanded(entry.id());
+            if (entry.parentId() == null) page = 0;
             rangeAnchor = -1;
             refreshTree();
+            refreshToolbar();
             return;
         }
 
@@ -315,31 +323,35 @@ public final class ChangedBlocksScreen extends Screen {
                 toggleSelection(entry);
                 rangeAnchor = rowIndex;
             }
-            ConfigStore.touchTreeEntry(entry.id(), entry.type() == ConfigStore.TreeEntryType.BLOCK
-                    ? entry.value() : null);
-            if (entry.parentId() == null) page = 0;
+            // Bulk selection is not activation and must not reorder the tree.
             refreshTree();
             rangeAnchor = findVisibleRowIndex(entry.id());
             return;
         }
 
-        // Promote the interacted occurrence only within its own directory.
-        ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(entry.id(),
-                entry.type() == ConfigStore.TreeEntryType.BLOCK ? entry.value() : null);
+        // A passive click establishes focus but does not reorder the row underneath the pointer.
+        // Reordering occurs only when the player activates it (opens or expands it).
         activeEntryId = entry.id();
-        if (entry.parentId() == null) page = 0;
-        refreshTree();
-        rangeAnchor = findVisibleRowIndex(entry.id());
+        pressedEntry = entry;
+        pressStartX = x;
+        pressStartY = y;
+        dragging = false;
+        dragTargetIndex = -1;
+        rangeAnchor = rowIndex;
 
-        // A single click selects the name; double-click opens a block or expands a container.
         if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
-            if (doubleClick) minecraft.gui.setScreen(new MainConfigScreen(entry.value(),
-                    touched == null ? entry.id() : touched.id()));
+            if (doubleClick) {
+                ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(entry.id(), entry.value());
+                if (entry.parentId() == null) page = 0;
+                minecraft.gui.setScreen(new MainConfigScreen(entry.value(),
+                        touched == null ? entry.id() : touched.id()));
+            }
         } else {
             entryDraft = entry.name();
             if (entryNameBox != null) entryNameBox.setValue(entryDraft);
             if (doubleClick) {
                 ConfigStore.toggleExpanded(entry.id());
+                if (entry.parentId() == null) page = 0;
                 rangeAnchor = -1;
                 refreshTree();
             }
@@ -390,7 +402,9 @@ public final class ChangedBlocksScreen extends Screen {
             int y = TREE_Y + visible * ROW_HEIGHT;
             boolean selected = selectedItems.containsKey(entry.id());
             boolean active = entry.id().equals(activeEntryId);
-            if (index == hoveredRow) {
+            if (dragging && dragTargetIndex == index && dragIntoFolder) {
+                graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0xFF456C55);
+            } else if (index == hoveredRow) {
                 graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0xFF414D5B);
             } else if (selected || active) {
                 graphics.fill(TREE_X - 1, y, treeRight, y + ROW_HEIGHT, 0xFF35414D);
@@ -417,8 +431,13 @@ public final class ChangedBlocksScreen extends Screen {
             if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
                 graphics.text(font, "x", treeRight - 13, y + 3, 0xFFDA8888);
             }
+            if (dragging && dragTargetIndex == index && !dragIntoFolder) {
+                int markerY = dragAfterTarget ? y + ROW_HEIGHT - 2 : y;
+                graphics.fill(TREE_X - 1, markerY, treeRight, markerY + 2, 0xFF8FC7E8);
+            }
         }
-        graphics.text(font, "Scroll to browse expanded entries", TREE_X, TREE_BOTTOM + 2, 0xFF87919B);
+        graphics.text(font, "Drag to reorder · drop on a folder to move · drop in blank space to root",
+                TREE_X, TREE_BOTTOM + 2, 0xFF87919B);
     }
 
     private void renderSelectionSidebar(GuiGraphicsExtractor graphics) {
@@ -501,6 +520,64 @@ public final class ChangedBlocksScreen extends Screen {
         }
 
         return super.mouseClicked(logical, doubleClick);
+    }
+
+
+    private void updateDragTarget(double x, double y) {
+        dragTargetIndex = -1;
+        dragIntoFolder = false;
+        dragAfterTarget = false;
+        if (x < TREE_X - 2 || x >= TREE_X + listWidth || y < TREE_Y || y >= TREE_BOTTOM) return;
+
+        int index = visibleTreeRowAt(y);
+        if (index < 0 || index >= visibleRows.size()
+                || pressedEntry == null || visibleRows.get(index).entry().id().equals(pressedEntry.id())) return;
+
+        dragTargetIndex = index;
+        VisibleRow target = visibleRows.get(index);
+        int rowY = TREE_Y + (index - treeScrollOffset) * ROW_HEIGHT;
+        double position = (y - rowY) / ROW_HEIGHT;
+        dragAfterTarget = position >= 0.5;
+        dragIntoFolder = target.entry().type() == ConfigStore.TreeEntryType.FOLDER
+                && position >= 0.25 && position <= 0.75;
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        MouseButtonEvent logical = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        if (pressedEntry != null && event.button() == 1) {
+            double dx = logical.x() - pressStartX;
+            double dy = logical.y() - pressStartY;
+            if (!dragging && dx * dx + dy * dy >= 16) dragging = true;
+            if (dragging) {
+                updateDragTarget(logical.x(), logical.y());
+                return true;
+            }
+        }
+        float scale = ResponsiveUi.scale(width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        return super.mouseDragged(logical, dragX / scale, dragY / scale);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        MouseButtonEvent logical = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        if (dragging && pressedEntry != null) {
+            updateDragTarget(logical.x(), logical.y());
+            ConfigStore.TreeEntry target = dragTargetIndex >= 0
+                    ? visibleRows.get(dragTargetIndex).entry() : null;
+            ConfigStore.moveTreeEntry(pressedEntry, target, dragIntoFolder, dragAfterTarget);
+            pressedEntry = null;
+            dragging = false;
+            dragTargetIndex = -1;
+            dragIntoFolder = false;
+            dragAfterTarget = false;
+            refreshTree();
+            return true;
+        }
+        pressedEntry = null;
+        dragging = false;
+        dragTargetIndex = -1;
+        return super.mouseReleased(logical);
     }
 
     @Override
