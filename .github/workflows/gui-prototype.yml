@@ -1,0 +1,78 @@
+name: GUI Prototype
+
+on:
+  push:
+    branches:
+      - main
+      - "gui/**"
+    paths:
+      - "prototype/**"
+      - "scripts/validate-gui.mjs"
+      - ".github/workflows/gui-prototype.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "prototype/**"
+      - "scripts/validate-gui.mjs"
+      - ".github/workflows/gui-prototype.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gui-prototype-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    name: Validate and package GUI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check JavaScript syntax
+        run: node --check prototype/app.js
+
+      - name: Validate GUI structure and interactions
+        run: node scripts/validate-gui.mjs
+
+      - name: Build static prototype
+        shell: bash
+        run: |
+          rm -rf dist gui-prototype.zip
+          mkdir -p dist
+          cp -R prototype/. dist/
+          (
+            cd dist
+            zip -qr ../gui-prototype.zip .
+          )
+
+      - name: Upload downloadable GUI prototype
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-prototype-${{ github.sha }}
+          path: gui-prototype.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write build summary
+        shell: bash
+        run: |
+          {
+            echo "## GUI prototype build"
+            echo
+            echo "- JavaScript syntax: passed"
+            echo "- GUI structure checks: passed"
+            echo "- Static bundle: `gui-prototype.zip`"
+            echo "- Download the **GUI prototype** artifact from this workflow run."
+            echo
+            echo "This job packages the browser prototype. It does not build a Minecraft mod; the repository does not currently contain Gradle or Minecraft source files."
+          } >> "$GITHUB_STEP_SUMMARY"
