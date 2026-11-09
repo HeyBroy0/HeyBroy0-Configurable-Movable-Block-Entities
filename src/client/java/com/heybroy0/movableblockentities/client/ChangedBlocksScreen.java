@@ -996,7 +996,11 @@ public final class ChangedBlocksScreen extends Screen {
                 : "📁".equals(symbol) ? 1.86F
                 : ("↶".equals(symbol) || "↷".equals(symbol)) ? 2.85F : 1.55F;
         float symbolHeight = 9.0F * symbolScale * 1.15F;
-        float symbolY = button.getY() + (button.getHeight() - symbolHeight) / 2.0F;
+        boolean centerVertically = "📁".equals(symbol)
+                || "↶".equals(symbol) || "↷".equals(symbol);
+        float symbolY = centerVertically
+                ? button.getY() + (button.getHeight() - symbolHeight) / 2.0F
+                : button.getY() + (button.getHeight() - 9) / 2.0F;
         graphics.pose().pushMatrix();
         graphics.pose().translate(button.getX() + button.getWidth() / 2.0F, symbolY);
         graphics.pose().scale(symbolScale, symbolScale);
