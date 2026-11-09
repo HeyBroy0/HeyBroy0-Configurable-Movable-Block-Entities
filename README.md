@@ -7,7 +7,7 @@ The mod should extend vanilla piston behavior while preserving vanilla mechanics
 The project already uses FrozenLib. Use it where appropriate, and avoid adding unnecessary dependencies.
 The mod must build through GitHub Actions.
 ---
-
+  
 ## Inspect and establish the development environment
 Before implementing features:
 1. Inspect the existing repository, project structure, Gradle configuration, and current source code.
@@ -266,7 +266,7 @@ It should not assign an arbitrary cardinal front to blocks without meaningful or
 For blocks without orientation:
 - HITBOX should use the actual physical geometry of the six faces.
 - ADHESIVE can enable all six faces.
-- ADVANCED should allow manual orientation or custom configuration.
+- ADVANCED should allow omnidirectional or manually controlled behavior instead of inventing a cardinal front.
 
 Changing the stickiness orientation must never change the block's actual Minecraft orientation or redstone behavior.
 
@@ -574,3 +574,14 @@ We assumed an ordinary Java interface could safely live inside the same package 
 We assumed Minecraft 26.3's PistonMovingBlockEntity.finalTick() contained a Level.setBlock() invocation at the expected injection point. The actual method bytecode did not contain a matching invocation at that location, so Mixin found zero targets and aborted startup.
 We assumed the same Level.setBlock() invocation would be available for MixinExtras to wrap inside finalTick(). The transformed method did not expose that invocation as expected, so MixinExtras could not install the wrapper.
 The recurring issue is that we were making assumptions about Minecraft's internal bytecode rather than verifying the actual 26.3 implementation before writing injection points. We should inspect the target methods in the exact Minecraft version and mappings we're building against before choosing Mixin injection strategies.
+
+
+---
+
+## Navigable GUI prototype
+
+A standalone browser prototype is available in [`prototype/`](prototype/). Open [`prototype/index.html`](prototype/index.html) directly in a browser; no build tools or Minecraft runtime are required. See [`prototype/README.md`](prototype/README.md) for the interaction guide.
+
+The prototype keeps movement, scheduled-tick, push-cost, and adhesion choices on the main screen. Selecting Hitbox or Advanced reveals the matching Configure button beside the adhesion choices. Block search includes a command-block-style suggestion panel with keyboard navigation and Tab completion.
+
+This is a GUI-only prototype. It uses a small illustrative block list and browser-local settings; it does not connect to Minecraft registries or implement piston, block-entity, scheduled-tick, multiblock, or adhesion runtime behavior.
