@@ -389,6 +389,7 @@ public final class ConfigStore {
     public static synchronized void openConfigDirectory() {
         try {
             Files.createDirectories(CONFIG_DIRECTORY);
+            Files.createDirectories(CACHE_DIRECTORY);
             Util.getPlatform().openFile(CONFIG_DIRECTORY.toFile());
         } catch (Exception exception) {
             System.err.println("[Movable Block Entities] Could not open config directory: " + exception.getMessage());
@@ -539,6 +540,18 @@ public final class ConfigStore {
     }
 
     /** Materializes and moves one exact occurrence to the top of its own directory. */
+    /** Moves the focused entry to the front of its current directory without changing its children. */
+    public static synchronized TreeEntry focusTreeEntry(String entryId) {
+        load();
+        TreeEntry entry = TREE_ENTRIES.get(entryId);
+        if (entry == null) return null;
+        if (entry.type() == TreeEntryType.BLOCK) return touchTreeEntry(entryId, entry.value());
+        TreeEntry focused = moveToTop(entry);
+        TREE_ENTRIES.put(focused.id(), focused);
+        save();
+        return focused;
+    }
+
     public static synchronized TreeEntry touchTreeEntry(String entryId, String blockId) {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
@@ -923,17 +936,6 @@ public final class ConfigStore {
 
     public static synchronized void save() {
         load();
-        if (!replayingHistory) {
-            String fingerprint = stateFingerprint();
-            if (lastHistorySnapshot != null && lastHistoryFingerprint != null
-                    && !fingerprint.equals(lastHistoryFingerprint)) {
-                UNDO_HISTORY.addLast(lastHistorySnapshot);
-                while (UNDO_HISTORY.size() > HISTORY_LIMIT) UNDO_HISTORY.removeFirst();
-                REDO_HISTORY.clear();
-            }
-            lastHistorySnapshot = captureSnapshot();
-            lastHistoryFingerprint = fingerprint;
-        }
         // Persist implicit root occurrences only after they acquire non-default settings.
         for (Map.Entry<String, BlockConfig> block : BLOCKS.entrySet()) {
             String entryId = block.getKey();
@@ -946,6 +948,17 @@ public final class ConfigStore {
                 TREE_ENTRIES.put(entryId, new TreeEntry(entryId, TreeEntryType.BLOCK,
                         blockId, blockId, null, topOrder(null), false));
             }
+        }
+        if (!replayingHistory) {
+            String fingerprint = stateFingerprint();
+            if (lastHistorySnapshot != null && lastHistoryFingerprint != null
+                    && !fingerprint.equals(lastHistoryFingerprint)) {
+                UNDO_HISTORY.addLast(lastHistorySnapshot);
+                while (UNDO_HISTORY.size() > HISTORY_LIMIT) UNDO_HISTORY.removeFirst();
+                REDO_HISTORY.clear();
+            }
+            lastHistorySnapshot = captureSnapshot();
+            lastHistoryFingerprint = fingerprint;
         }
         Properties properties = new Properties();
         properties.setProperty("format.version", "3");
