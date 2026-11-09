@@ -267,7 +267,7 @@ public final class MainConfigScreen extends Screen {
 
     private String fitSingleLine(String value, int maxWidth) {
         String result = value == null ? "" : value;
-        while (!result.isEmpty() && font.width(result) > maxWidth) {
+        while (!result.isEmpty() && ResponsiveUi.textWidth(font, result) > maxWidth) {
             result = result.substring(0, result.length() - 1);
         }
         return result;
@@ -294,6 +294,12 @@ public final class MainConfigScreen extends Screen {
     private void persistCurrentConfig() {
         if (!focusEntryIds.isEmpty()) ConfigStore.applyConfigToEntries(config, focusEntryIds);
         else ConfigStore.save();
+    }
+
+    private void applyFocusedSettings() {
+        if (focusEntryIds.isEmpty()) return;
+        ConfigStore.applyConfigToEntries(config, focusEntryIds);
+        refreshControlLabels();
     }
 
     private void persistAndRefresh() {
@@ -678,8 +684,8 @@ public final class MainConfigScreen extends Screen {
         int logicalMouseX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
 
-        graphics.centeredText(font, "CONFIGURABLE MOVABLE BLOCK ENTITIES", left + PANEL_WIDTH / 2, top + 13, 0xFFFFFFFF);
-        graphics.text(font, "BLOCK SEARCH", left + 20, top + 49, 0xFFBFC6CF);
+        ResponsiveUi.centeredText(graphics, font, "CONFIGURABLE MOVABLE BLOCK ENTITIES", left + PANEL_WIDTH / 2, top + 13, 0xFFFFFFFF);
+        ResponsiveUi.text(graphics, font, "BLOCK SEARCH", left + 20, top + 49, 0xFFBFC6CF);
         graphics.text(font, focusedSummary(), left + 20, top + 91, 0xFF9FA8B2);
         graphics.text(font, "Movement", left + 22, top + 122, 0xFFE5E8EB);
         graphics.text(font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
@@ -714,7 +720,7 @@ public final class MainConfigScreen extends Screen {
                 graphics.text(font, suggestion.id(), x + 7, rowY + 5,
                         (index == hoveredSuggestionIndex || index == suggestionIndex)
                                 ? 0xFFFFFF55 : 0xFFE6E9ED);
-                int nameWidth = font.width(suggestion.name());
+                int nameWidth = ResponsiveUi.textWidth(font, suggestion.name());
                 graphics.text(font, suggestion.name(), x + w - nameWidth - 8, rowY + 5, 0xFF9FA8B2);
             }
         }
