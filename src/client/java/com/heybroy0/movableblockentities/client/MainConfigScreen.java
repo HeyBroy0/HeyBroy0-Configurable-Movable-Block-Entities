@@ -24,7 +24,7 @@ public final class MainConfigScreen extends Screen {
     private static final int PANEL_WIDTH = 520;
     private static final int PANEL_HEIGHT = 360;
     private static final int SUGGESTION_ROW_HEIGHT = 18;
-    private static final int MAX_SUGGESTIONS = 7;
+    private static final int MAX_VISIBLE_SUGGESTIONS = 7;
 
     private String selectedBlockId;
     private BlockConfig config;
@@ -36,6 +36,7 @@ public final class MainConfigScreen extends Screen {
     private Button configureButton;
     private List<BlockSuggestion> suggestions = List.of();
     private int suggestionIndex;
+    private int suggestionScrollOffset;
     private int left;
     private int top;
     private int searchY;
@@ -50,9 +51,8 @@ public final class MainConfigScreen extends Screen {
     @Override
     protected void init() {
         clearWidgets();
-        left = (width - PANEL_WIDTH) / 2;
-        top = (height - PANEL_HEIGHT) / 2;
-        if (top < 8) top = 8;
+        left = 0;
+        top = 0;
 
         searchY = top + 66;
         searchBox = new EditBox(font, left + 20, searchY, PANEL_WIDTH - 40, 20,
@@ -157,6 +157,7 @@ public final class MainConfigScreen extends Screen {
         String query = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         if (query.isEmpty()) {
             suggestions = List.of();
+            suggestionScrollOffset = 0;
             return;
         }
 
@@ -177,7 +178,9 @@ public final class MainConfigScreen extends Screen {
         }
         found.sort(Comparator.comparing(BlockSuggestion::prefixMatch).reversed()
                 .thenComparing(BlockSuggestion::id));
-        suggestions = found.stream().limit(MAX_SUGGESTIONS).toList();
+        suggestions = List.copyOf(found);
+        suggestionScrollOffset = 0;
+        suggestionIndex = 0;
     }
 
     private boolean suggestionsOpen() {
@@ -187,15 +190,23 @@ public final class MainConfigScreen extends Screen {
     private int popupX() { return left + 20; }
     private int popupY() { return searchY + 22; }
 
-    private void moveSuggestion(int direction) {
+    private void moveSuggestion(int direction, boolean wrap) {
         if (suggestions.isEmpty()) return;
-        suggestionIndex = Math.floorMod(suggestionIndex + direction, suggestions.size());
-    }
 
-    private void fillSuggestion() {
-        if (suggestions.isEmpty()) return;
-        searchBox.setValue(suggestions.get(suggestionIndex).id());
-        searchBox.setCursorPosition(searchBox.getValue().length());
+        if (wrap) {
+            suggestionIndex = Math.floorMod(suggestionIndex + direction, suggestions.size());
+        } else {
+            suggestionIndex = Math.max(0, Math.min(suggestions.size() - 1, suggestionIndex + direction));
+        }
+
+        if (suggestionIndex < suggestionScrollOffset) {
+            suggestionScrollOffset = suggestionIndex;
+        } else if (suggestionIndex >= suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS) {
+            suggestionScrollOffset = suggestionIndex - MAX_VISIBLE_SUGGESTIONS + 1;
+        }
+
+        int maxOffset = Math.max(0, suggestions.size() - MAX_VISIBLE_SUGGESTIONS);
+        suggestionScrollOffset = Math.max(0, Math.min(maxOffset, suggestionScrollOffset));
     }
 
     private void chooseSuggestion(int index) {
@@ -236,67 +247,86 @@ public final class MainConfigScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (searchBox != null && searchBox.isFocused()) {
+        if (searchBox != null && searchBox.isFocused() && suggestionsOpen()) {
             if (event.key() == InputConstants.KEY_TAB) {
-                fillSuggestion();
+                moveSuggestion(event.hasShiftDown() ? -1 : 1, true);
                 return true;
             }
-            if (event.key() == InputConstants.KEY_DOWN && suggestionsOpen()) {
-                moveSuggestion(1);
+            if (event.key() == InputConstants.KEY_DOWN) {
+                moveSuggestion(1, true);
                 return true;
             }
-            if (event.key() == InputConstants.KEY_UP && suggestionsOpen()) {
-                moveSuggestion(-1);
+            if (event.key() == InputConstants.KEY_UP) {
+                moveSuggestion(-1, true);
                 return true;
             }
             if (event.key() == InputConstants.KEY_RETURN) {
-                if (suggestionsOpen()) {
-                    chooseSuggestion(suggestionIndex);
-                    return true;
-                }
-                chooseExactMatch();
+                chooseSuggestion(suggestionIndex);
+                return true;
             }
+        } else if (searchBox != null && searchBox.isFocused()
+                && event.key() == InputConstants.KEY_RETURN) {
+            chooseExactMatch();
+            return true;
         }
         return super.keyPressed(event);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == 1 && suggestionsOpen()) {
-            int y = (int) event.y();
+        MouseButtonEvent logicalEvent = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        if (logicalEvent.button() == 1 && suggestionsOpen()) {
+            int x = (int) logicalEvent.x();
+            int y = (int) logicalEvent.y();
             int row = (y - popupY()) / SUGGESTION_ROW_HEIGHT;
-            int x = (int) event.x();
+            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS,
+                    suggestions.size() - suggestionScrollOffset);
             if (x >= popupX() && x <= popupX() + PANEL_WIDTH - 40
-                    && row >= 0 && row < suggestions.size()
-                    && y < popupY() + suggestions.size() * SUGGESTION_ROW_HEIGHT) {
-                chooseSuggestion(row);
+                    && row >= 0 && row < visibleCount
+                    && y < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT) {
+                chooseSuggestion(suggestionScrollOffset + row);
                 return true;
             }
         }
-        return super.mouseClicked(event, doubleClick);
+        return super.mouseClicked(logicalEvent, doubleClick);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        double logicalX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        double logicalY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         if (suggestionsOpen() && scrollY != 0) {
-            moveSuggestion(scrollY < 0 ? 1 : -1);
-            return true;
+            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS,
+                    suggestions.size() - suggestionScrollOffset);
+            boolean overPopup = logicalX >= popupX() && logicalX <= popupX() + PANEL_WIDTH - 40
+                    && logicalY >= popupY() && logicalY < popupY() + visibleCount * SUGGESTION_ROW_HEIGHT;
+            if (overPopup) {
+                // Wheel navigation stops at either end; keyboard Tab navigation wraps.
+                moveSuggestion(scrollY < 0 ? 1 : -1, false);
+                return true;
+            }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(logicalX, logicalY, scrollX, scrollY);
     }
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
         graphics.fillGradient(0, 0, width, height, 0xFF202329, 0xFF101215);
+        ResponsiveUi.push(graphics, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         graphics.fill(left - 3, top - 3, left + PANEL_WIDTH + 3, top + PANEL_HEIGHT + 3, 0xAA050607);
         graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xEE292D32);
         graphics.outline(left, top, PANEL_WIDTH, PANEL_HEIGHT, 0xFF555B62);
         graphics.fill(left + 1, top + 1, left + PANEL_WIDTH - 1, top + 36, 0xFF202428);
         graphics.fill(left + 18, top + 36, left + PANEL_WIDTH - 18, top + 37, 0xFF4C535B);
+        graphics.pose().popMatrix();
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+        ResponsiveUi.push(graphics, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        int logicalMouseX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+        int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
+
         graphics.centeredText(font, "CONFIGURABLE MOVABLE BLOCK ENTITIES", left + PANEL_WIDTH / 2, top + 13, 0xFFFFFFFF);
         graphics.text(font, "BLOCK SEARCH", left + 20, top + 49, 0xFFBFC6CF);
         graphics.text(font, "Selected: " + selectedBlockId, left + 20, top + 91, 0xFF9FA8B2);
@@ -304,34 +334,36 @@ public final class MainConfigScreen extends Screen {
         graphics.text(font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
         graphics.text(font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
         graphics.text(font, "Adhesion", left + 22, top + 227, 0xFFE5E8EB);
-        graphics.text(font, "O opens this screen  •  Change values here; no piston mechanics are active in this prototype.",
-                left + 20, top + 268, 0xFF9CA4AC);
-        graphics.text(font, "Tab fills the highlighted block  •  Enter selects it  •  ↑ / ↓ moves through suggestions",
+        graphics.text(font, "O opens this screen  •  Settings are saved locally.", left + 20, top + 268, 0xFF9CA4AC);
+        graphics.text(font, "Tab / Shift+Tab navigate  •  Enter selects  •  ↑ / ↓ also navigate  •  Mouse wheel scrolls",
                 left + 20, top + 286, 0xFF9CA4AC);
 
-        super.extractRenderState(graphics, mouseX, mouseY, a);
+        super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
 
         if (suggestionsOpen()) {
             int x = popupX();
             int y = popupY();
             int w = PANEL_WIDTH - 40;
-            int h = suggestions.size() * SUGGESTION_ROW_HEIGHT;
+            int visibleCount = Math.min(MAX_VISIBLE_SUGGESTIONS, suggestions.size() - suggestionScrollOffset);
+            int h = visibleCount * SUGGESTION_ROW_HEIGHT;
             graphics.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xF0101113);
             graphics.outline(x - 1, y - 1, w + 2, h + 2, 0xFF6B737C);
-            for (int i = 0; i < suggestions.size(); i++) {
-                BlockSuggestion suggestion = suggestions.get(i);
-                int rowY = y + i * SUGGESTION_ROW_HEIGHT;
-                if (i == suggestionIndex) {
+            for (int row = 0; row < visibleCount; row++) {
+                int index = suggestionScrollOffset + row;
+                BlockSuggestion suggestion = suggestions.get(index);
+                int rowY = y + row * SUGGESTION_ROW_HEIGHT;
+                if (index == suggestionIndex) {
                     graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0xFF46515E);
-                } else if ((i & 1) == 1) {
+                } else if ((row & 1) == 1) {
                     graphics.fill(x, rowY, x + w, rowY + SUGGESTION_ROW_HEIGHT, 0x661C2024);
                 }
                 graphics.text(font, suggestion.id(), x + 7, rowY + 5,
-                        i == suggestionIndex ? 0xFFFFFF55 : 0xFFE6E9ED);
+                        index == suggestionIndex ? 0xFFFFFF55 : 0xFFE6E9ED);
                 int nameWidth = font.width(suggestion.name());
                 graphics.text(font, suggestion.name(), x + w - nameWidth - 8, rowY + 5, 0xFF9FA8B2);
             }
         }
+        graphics.pose().popMatrix();
     }
 
     @Override
