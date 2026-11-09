@@ -80,27 +80,37 @@ When a block is searched from the main screen, the first/topmost occurrence in t
 
 ## Configuration storage and recovery
 
-Settings are stored in:
+The GUI's editable source-of-truth is:
 
 `config/movable-block-entities/settings.properties`
 
-The directory is created under Minecraft's usual `config` folder. The **Config** button on Changed Blocks opens it. A reserved `cache/` subdirectory is created when opening the config directory; the current prototype does not use a separate disk cache.
+It stores the full tree (entry type, parent, order, expansion state) and per-occurrence block settings. The **Config** button on Changed Blocks opens the containing directory.
 
-The tree-aware format stores entry type, parent, order, expansion state, and per-occurrence block settings. Writes use a temporary file and atomic replacement where supported.
+The GUI also generates a separate, flattened runtime snapshot:
 
-On load, the store checks the saved hierarchy for entries that cannot be reached from the root. Entries with missing parents, invalid block parents, or parent-reference cycles are reconnected to the root, keeping their descendants intact. The repaired tree is saved automatically. This recovery does not require deleting the configuration file.
+`config/movable-block-entities/cache/runtime-config.properties`
 
-Back up `settings.properties` before testing development builds that change persistence behavior.
+This cache contains the effective settings for each block ID after the saved tree's priority rules and live tag-selector membership have been resolved. It is deliberately independent of the GUI tree format: runtime code should not need to understand folders, selectors, selection state, or screen classes. The cache has its own versioned schema and is replaced atomically. It is regenerated when settings are saved or loaded, and again after the active world supplies its block-tag data.
+
+The standalone Java module under `core/` owns the runtime cache contract. `RuntimeConfigCache` can load the cache from a `Path`, query a block's immutable `BlockSettings`, or return the complete snapshot. It has no Minecraft, Fabric, or GUI dependencies. Future movement, adhesion, and block-entity systems should depend on this core API rather than importing GUI classes or parsing `settings.properties` themselves.
+
+On load, the GUI store checks the saved hierarchy for entries that cannot be reached from the root. Entries with missing parents, invalid block parents, or parent-reference cycles are reconnected to the root, keeping their descendants intact. The repaired tree is saved automatically. This recovery does not require deleting the configuration file.
+
+Back up both `settings.properties` and the generated cache before testing development builds that change persistence or cache formats. The editable settings file is authoritative; the runtime cache can be regenerated from it.
 
 ## Build
 
 Minecraft 26.3's current Fabric toolchain requires Java 25:
 
 ```sh
+# Build the complete Fabric GUI prototype and its bundled core API.
 ./gradlew clean build
+
+# Build the GUI-independent runtime configuration API by itself.
+./gradlew :core:build
 ```
 
-The GitHub Actions workflow builds the project and uploads the mod JAR as an artifact.
+The `:core` project is a pure Java library module and can be compiled without compiling the GUI source. The full Fabric artifact bundles that API for convenience. The core jar is also published as a separate build artifact, so a future non-GUI mod/runtime project can consume it independently.
 
 ## Scope and limitations
 
