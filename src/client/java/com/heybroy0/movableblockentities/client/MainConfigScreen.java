@@ -166,7 +166,8 @@ public final class MainConfigScreen extends Screen {
                 button -> openAdhesionEditor());
 
         changedBlocksButton = addButton("", left + 20, top + 307, 132, 22,
-                button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0)));
+                button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
+                        0, focusContainerId, focusEntryIds, focusIndex)));
         if (!focusEntryIds.isEmpty()) {
             applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
                     button -> applyFocusedSettings());
@@ -631,7 +632,7 @@ public final class MainConfigScreen extends Screen {
         AdhesionEditorScreen.Page page = config.adhesion == Adhesion.HITBOX
                 ? AdhesionEditorScreen.Page.HITBOX : AdhesionEditorScreen.Page.ADVANCED;
         minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId,
-                page, focusedTargetBlockIds()));
+                page, focusedTargetBlockIds(), focusContainerId, focusEntryIds, focusIndex));
     }
 
     private void closeConfiguration() {
