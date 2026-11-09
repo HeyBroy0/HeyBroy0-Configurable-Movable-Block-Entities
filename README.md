@@ -7,7 +7,7 @@ The mod should extend vanilla piston behavior while preserving vanilla mechanics
 The project already uses FrozenLib. Use it where appropriate, and avoid adding unnecessary dependencies.
 The mod must build through GitHub Actions.
 ---
-  
+
 ## Inspect and establish the development environment
 Before implementing features:
 1. Inspect the existing repository, project structure, Gradle configuration, and current source code.
@@ -266,7 +266,7 @@ It should not assign an arbitrary cardinal front to blocks without meaningful or
 For blocks without orientation:
 - HITBOX should use the actual physical geometry of the six faces.
 - ADHESIVE can enable all six faces.
-- ADVANCED should allow omnidirectional or manually controlled behavior instead of inventing a cardinal front.
+- ADVANCED should allow manual orientation or custom configuration.
 
 Changing the stickiness orientation must never change the block's actual Minecraft orientation or redstone behavior.
 
