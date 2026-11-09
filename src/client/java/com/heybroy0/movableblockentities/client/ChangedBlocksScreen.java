@@ -62,8 +62,10 @@ public final class ChangedBlocksScreen extends Screen {
     private String activeEntryId;
     private ConfigStore.TreeEntry activeEntrySnapshot;
     private String entryDraft = "";
+    private String renamingEntryId;
 
     private EditBox entryNameBox;
+    private EditBox renameBox;
     private Button folderButton;
     private Button renameButton;
     private Button bulkButton;
@@ -106,12 +108,12 @@ public final class ChangedBlocksScreen extends Screen {
 
         folderButton = addButton("", left + 18, top + TOOLBAR_Y, 64, 24,
                 "New folder", button -> createFolder());
-        renameButton = addButton("", left + 86, top + TOOLBAR_Y, 36, 24,
+        renameButton = addButton("", left + 99, top + TOOLBAR_Y, 36, 24,
                 "Rename folder", button -> renameSelected());
-        focusButton = addButton("", left + 126, top + TOOLBAR_Y, 36, 24,
+        focusButton = addButton("", left + 139, top + TOOLBAR_Y, 36, 24,
                 "Focus selected entry", button -> focusSelectedEntry());
         bulkButton = addButton("",
-                left + 166, top + TOOLBAR_Y, 40, 24,
+                left + 179, top + TOOLBAR_Y, 40, 24,
                 bulkMode ? "Finish bulk selection" : "Bulk select",
                 button -> {
                     if (!bulkMode) {
@@ -133,13 +135,13 @@ public final class ChangedBlocksScreen extends Screen {
                     else selectionChanged();
                     refreshToolbar();
                 });
-        deleteButton = addButton("", left + 210, top + TOOLBAR_Y, 30, 24,
+        deleteButton = addButton("", left + 223, top + TOOLBAR_Y, 30, 24,
                 "Delete selected entries / revert blocks", button -> deleteSelectedEntries());
-        undoButton = addButton("", left + 244, top + TOOLBAR_Y, 30, 24,
+        undoButton = addButton("", left + 257, top + TOOLBAR_Y, 45, 24,
                 "Undo last edit", button -> runUndo());
-        redoButton = addButton("", left + 278, top + TOOLBAR_Y, 30, 24,
+        redoButton = addButton("", left + 306, top + TOOLBAR_Y, 45, 24,
                 "Redo last undone edit", button -> runRedo());
-        copyButton = addButton("", left + 312, top + TOOLBAR_Y, 30, 24,
+        copyButton = addButton("", left + 355, top + TOOLBAR_Y, 30, 24,
                 "Copy selected entries", button -> copySelectedEntries());
         deselectAllButton = addButton("", left + PANEL_WIDTH - 96, top + TREE_Y + 1, 78, 16,
                 "Deselect all selected entries", button -> deselectAll());
@@ -158,6 +160,7 @@ public final class ChangedBlocksScreen extends Screen {
             refreshTree();
         });
         addRenderableWidget(entryNameBox);
+        createInlineRenameBox();
         configDirectoryButton = addButton("", left + 386, top + EDIT_Y, 116, 18,
                 "Open this mod's config folder", button -> ConfigStore.openConfigDirectory());
 
@@ -364,16 +367,55 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void renameSelected() {
-        if (!ConfigStore.isUserTreeEntry(activeEntryId)) return;
-        String name = entryDraft.trim();
-        if (name.isBlank()) return;
-        ConfigStore.renameTreeEntry(activeEntryId, name);
-        ConfigStore.TreeEntry renamed = ConfigStore.findTreeEntry(activeEntryId);
-        if (renamed != null && selectedItems.containsKey(activeEntryId)) {
-            selectedItems.put(activeEntryId, renamed);
+        ConfigStore.TreeEntry entry = activeEntry();
+        if (entry == null || !ConfigStore.isUserTreeEntry(entry.id())) return;
+        renamingEntryId = entry.id();
+        init();
+    }
+
+    private void createInlineRenameBox() {
+        if (renamingEntryId == null) return;
+        int rowIndex = findVisibleRowIndex(renamingEntryId);
+        if (rowIndex < treeScrollOffset || rowIndex >= Math.min(visibleRows.size(),
+                treeScrollOffset + maxVisibleRows())) {
+            renamingEntryId = null;
+            return;
         }
-        activeEntrySnapshot = renamed;
-        entryDraft = "";
+        ConfigStore.TreeEntry entry = visibleRows.get(rowIndex).entry();
+        int y = TREE_Y + (rowIndex - treeScrollOffset) * ROW_HEIGHT;
+        int x = TREE_X + 2 + visibleRows.get(rowIndex).depth() * TREE_INDENT + TREE_INDENT;
+        int width = Math.max(40, TREE_X + listWidth - x - 8);
+        renameBox = new EditBox(font, x, y, width, ROW_HEIGHT,
+                Component.literal("Rename folder"));
+        renameBox.setMaxLength(128);
+        renameBox.setBordered(true);
+        renameBox.setValue(entry.name());
+        addRenderableWidget(renameBox);
+        setFocused(renameBox);
+        renameBox.setFocused(true);
+        renameBox.setCursorPosition(renameBox.getValue().length());
+    }
+
+    private void commitRename() {
+        if (renameBox == null || renamingEntryId == null) return;
+        String name = renameBox.getValue().trim();
+        if (!name.isBlank()) {
+            ConfigStore.renameTreeEntry(renamingEntryId, name);
+            ConfigStore.TreeEntry renamed = ConfigStore.findTreeEntry(renamingEntryId);
+            if (renamed != null && selectedItems.containsKey(renamingEntryId)) {
+                selectedItems.put(renamingEntryId, renamed);
+            }
+            activeEntrySnapshot = renamed;
+        }
+        renamingEntryId = null;
+        renameBox = null;
+        init();
+    }
+
+    private void cancelRename() {
+        if (renamingEntryId == null) return;
+        renamingEntryId = null;
+        renameBox = null;
         init();
     }
 
@@ -826,7 +868,12 @@ public final class ChangedBlocksScreen extends Screen {
                 case SELECTOR -> 0xFF8FC7E8;
                 case BLOCK -> 0xFFE4E8EC;
             };
-            ResponsiveUi.text(graphics, font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
+            if (entry.id().equals(renamingEntryId) && renameBox != null) {
+                renameBox.setPosition(textX, y);
+                renameBox.setWidth(Math.max(40, labelWidth));
+            } else {
+                ResponsiveUi.text(graphics, font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
+            }
             if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
                 ResponsiveUi.text(graphics, font, "x", treeRight - 13, y + 3, 0xFFDA8888);
             }
@@ -907,11 +954,29 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void renderTextButtonLabels(GuiGraphicsExtractor graphics) {
-        drawTextButtonLabel(graphics, configDirectoryButton, "📂 Config");
+        drawConfigDirectoryLabel(graphics);
         drawTextButtonLabel(graphics, previousButton, "‹ Previous");
         drawTextButtonLabel(graphics, nextButton, "Next ›");
         drawTextButtonLabel(graphics, backButton, "Back");
         drawTextButtonLabel(graphics, deselectAllButton, "Deselect all");
+    }
+
+    private void drawConfigDirectoryLabel(GuiGraphicsExtractor graphics) {
+        if (configDirectoryButton == null || !configDirectoryButton.visible) return;
+        int centerX = configDirectoryButton.getX() + configDirectoryButton.getWidth() / 2;
+        int centerY = configDirectoryButton.getY() + Math.max(2, (configDirectoryButton.getHeight() - 8) / 2);
+        int iconWidth = ResponsiveUi.textWidth(font, "📂");
+        int textWidth = ResponsiveUi.textWidth(font, "Config");
+        int totalWidth = iconWidth + 2 + textWidth;
+        int startX = centerX - totalWidth / 2;
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(startX + iconWidth / 2.0F, centerY + 1);
+        graphics.pose().scale(1.35F, 1.35F);
+        ResponsiveUi.centeredText(graphics, font, "📂", 0, 0,
+                configDirectoryButton.active ? 0xFFFFFFFF : 0xFF777777);
+        graphics.pose().popMatrix();
+        ResponsiveUi.text(graphics, font, "Config", startX + iconWidth + 2, centerY,
+                configDirectoryButton.active ? 0xFFFFFFFF : 0xFF777777);
     }
 
     private void drawTextButtonLabel(GuiGraphicsExtractor graphics, Button button, String label) {
@@ -928,7 +993,8 @@ public final class ChangedBlocksScreen extends Screen {
         graphics.pose().translate(button.getX() + button.getWidth() / 2.0F,
                 button.getY() + (button.getHeight() - 9) / 2.0F);
         float symbolScale = "☑".equals(symbol) ? 1.0F
-                : ("↶".equals(symbol) || "↷".equals(symbol)) ? 1.9F : 1.55F;
+                : "📁".equals(symbol) ? 1.86F
+                : ("↶".equals(symbol) || "↷".equals(symbol)) ? 2.85F : 1.55F;
         graphics.pose().scale(symbolScale, symbolScale);
         ResponsiveUi.centeredText(graphics, font, symbol, 0, 0, button.active ? 0xFFFFFFFF : 0xFF777777);
         graphics.pose().popMatrix();
@@ -975,6 +1041,13 @@ public final class ChangedBlocksScreen extends Screen {
         MouseButtonEvent logical = ResponsiveUi.toLogical(event, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         double x = logical.x();
         double y = logical.y();
+
+        if (renamingEntryId != null && renameBox != null) {
+            boolean insideRename = x >= renameBox.getX() && x < renameBox.getX() + renameBox.getWidth()
+                    && y >= renameBox.getY() && y < renameBox.getY() + renameBox.getHeight();
+            if (!insideRename) cancelRename();
+            else return super.mouseClicked(logical, doubleClick);
+        }
 
         if (x >= TREE_X - 2 && x < TREE_X + listWidth && y >= TREE_Y && y < TREE_BOTTOM) {
             handleTreeClick(logical, doubleClick, x, y);
@@ -1126,6 +1199,17 @@ public final class ChangedBlocksScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
+        if (renamingEntryId != null && renameBox != null) {
+            if (event.key() == 40) { // SDL scancode for Enter
+                commitRename();
+                return true;
+            }
+            if (event.key() == 41) { // SDL scancode for Escape
+                cancelRename();
+                return true;
+            }
+            if (renameBox.keyPressed(event)) return true;
+        }
         if (event.key() == 41) { // SDL scancode for Escape
             boolean preserveFocus = !returnFocusEntryIds.isEmpty();
             minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
