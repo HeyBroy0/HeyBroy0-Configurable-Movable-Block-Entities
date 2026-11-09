@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,9 +34,7 @@ public final class ChangedBlocksScreen extends Screen {
 
     private final String returnBlock;
     private final String returnEntryId;
-    private final String returnFocusContainerId;
     private final List<String> returnFocusEntryIds;
-    private final int returnFocusIndex;
     private final Map<String, ConfigStore.TreeEntry> selectedItems = new LinkedHashMap<>();
     private boolean singleSelectionAdded;
     private int page;
@@ -81,17 +78,15 @@ public final class ChangedBlocksScreen extends Screen {
     private List<ConfigStore.TreeEntry> roots = List.of();
 
     public ChangedBlocksScreen(String returnBlock, int page) {
-        this(returnBlock, null, page, null, List.of(), -1);
+        this(returnBlock, null, page, List.of());
     }
 
     public ChangedBlocksScreen(String returnBlock, String returnEntryId, int page,
-                               String focusContainerId, List<String> focusEntryIds, int focusIndex) {
+                               List<String> focusEntryIds) {
         super(Component.literal("Changed Blocks"));
         this.returnBlock = returnBlock;
         this.returnEntryId = returnEntryId;
-        this.returnFocusContainerId = focusContainerId;
         this.returnFocusEntryIds = focusEntryIds == null ? List.of() : List.copyOf(focusEntryIds);
-        this.returnFocusIndex = focusIndex;
         this.page = Math.max(0, page);
     }
 
@@ -179,7 +174,7 @@ public final class ChangedBlocksScreen extends Screen {
                 button -> {
                     boolean preserveFocus = !returnFocusEntryIds.isEmpty();
                     minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
-                            null, preserveFocus ? returnFocusEntryIds : List.of(), -1));
+                            preserveFocus ? returnFocusEntryIds : List.of()));
                 });
 
         refreshToolbar();
@@ -289,8 +284,7 @@ public final class ChangedBlocksScreen extends Screen {
 
         // Store the exact selected entries in breadth-first tree order. Directories are
         // targets in their own right; settings applied to them include their descendants.
-        minecraft.gui.setScreen(new MainConfigScreen(firstBlock.value(), firstBlock.id(),
-                null, focusTargets, -1));
+        minecraft.gui.setScreen(new MainConfigScreen(firstBlock.value(), firstBlock.id(), focusTargets));
     }
 
     private MainConfigScreen mainScreenForBlock(ConfigStore.TreeEntry entry) {
@@ -309,8 +303,8 @@ public final class ChangedBlocksScreen extends Screen {
         }
         // Preserve the snapshot only when the selected occurrence belongs to one of its
         // originally selected targets. An unrelated item starts with no focus.
-        return new MainConfigScreen(entry.value(), entry.id(), null,
-                insideFocusSnapshot ? returnFocusEntryIds : List.of(), -1);
+        return new MainConfigScreen(entry.value(), entry.id(),
+                insideFocusSnapshot ? returnFocusEntryIds : List.of());
     }
 
     private void deleteSelectedEntries() {
@@ -1113,7 +1107,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (event.key() == 41) { // SDL scancode for Escape
             boolean preserveFocus = !returnFocusEntryIds.isEmpty();
             minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
-                    null, preserveFocus ? returnFocusEntryIds : List.of(), -1));
+                    preserveFocus ? returnFocusEntryIds : List.of()));
             return true;
         }
         return super.keyPressed(event);
