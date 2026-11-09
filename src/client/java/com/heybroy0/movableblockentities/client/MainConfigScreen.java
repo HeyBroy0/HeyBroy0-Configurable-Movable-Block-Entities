@@ -149,8 +149,7 @@ public final class MainConfigScreen extends Screen {
                 int parsed = Integer.parseInt(value);
                 if (parsed > 0) {
                     config.pushCost = parsed;
-                    ConfigStore.save();
-                    applyFocusedSettings();
+                    persistCurrentConfig();
                 }
             } catch (NumberFormatException ignored) {
                 // Keep the last valid saved value while the user edits the field.
@@ -292,16 +291,14 @@ public final class MainConfigScreen extends Screen {
         persistAndRefresh();
     }
 
-    private void persistAndRefresh() {
-        ConfigStore.save();
-        applyFocusedSettings();
-        refreshControlLabels();
+    private void persistCurrentConfig() {
+        if (!focusEntryIds.isEmpty()) ConfigStore.applyConfigToEntries(config, focusEntryIds);
+        else ConfigStore.save();
     }
 
-    private void applyFocusedSettings() {
-        if (!focusEntryIds.isEmpty()) {
-            ConfigStore.applyConfigToEntries(config, focusEntryIds);
-        }
+    private void persistAndRefresh() {
+        persistCurrentConfig();
+        refreshControlLabels();
     }
 
     private void refreshControlLabels() {
