@@ -129,7 +129,8 @@ public final class ChangedBlocksScreen extends Screen {
                     }
                     hoveredRow = -1;
                     rebuildVisibleRows();
-                    selectionChanged();
+                    if (bulkMode && selectedItems.isEmpty()) refreshToolbar();
+                    else selectionChanged();
                     refreshToolbar();
                 });
         deleteButton = addButton("", left + 210, top + TOOLBAR_Y, 30, 24,
@@ -171,12 +172,9 @@ public final class ChangedBlocksScreen extends Screen {
         });
         backButton = addButton("", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
                 button -> {
-                    boolean preserveFocus = returnFocusContainerId != null
-                            && ConfigStore.findTreeEntry(returnFocusContainerId) != null;
+                    boolean preserveFocus = !returnFocusEntryIds.isEmpty();
                     minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
-                            preserveFocus ? returnFocusContainerId : null,
-                            preserveFocus ? returnFocusEntryIds : List.of(),
-                            preserveFocus ? returnFocusIndex : -1));
+                            null, preserveFocus ? returnFocusEntryIds : List.of(), -1));
                 });
 
         refreshToolbar();
@@ -287,32 +285,23 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private MainConfigScreen mainScreenForBlock(ConfigStore.TreeEntry entry) {
-        if (returnFocusContainerId != null && ConfigStore.findTreeEntry(returnFocusContainerId) != null) {
-            List<ConfigStore.TreeEntry> contained = ConfigStore.blockEntriesUnder(returnFocusContainerId);
-            ConfigStore.TreeEntry occurrence = contained.stream()
-                    .filter(candidate -> candidate.id().equals(entry.id()))
-                    .findFirst()
-                    .orElseGet(() -> contained.stream()
-                            .filter(candidate -> candidate.value().equals(entry.value()))
-                            .findFirst().orElse(null));
-            if (occurrence != null) {
-                return new MainConfigScreen(occurrence.value(), occurrence.id(),
-                        returnFocusContainerId, returnFocusEntryIds,
-                        focusTargetIndex(occurrence));
+        boolean insideFocusSnapshot = false;
+        for (String targetId : returnFocusEntryIds) {
+            ConfigStore.TreeEntry target = ConfigStore.findTreeEntry(targetId);
+            if (target == null) {
+                if (targetId.equals(entry.id())) insideFocusSnapshot = true;
+            } else if (target.type() == ConfigStore.TreeEntryType.BLOCK) {
+                insideFocusSnapshot |= target.id().equals(entry.id());
+            } else {
+                insideFocusSnapshot |= ConfigStore.blockEntriesUnder(targetId).stream()
+                        .anyMatch(block -> block.id().equals(entry.id()));
             }
+            if (insideFocusSnapshot) break;
         }
-        // Selecting an item outside the originating scope deliberately drops that focus.
-        return new MainConfigScreen(entry.value(), entry.id());
-    }
-
-    private int focusTargetIndex(ConfigStore.TreeEntry occurrence) {
-        ConfigStore.TreeEntry cursor = occurrence;
-        while (cursor != null) {
-            int index = returnFocusEntryIds.indexOf(cursor.id());
-            if (index >= 0) return index;
-            cursor = cursor.parentId() == null ? null : ConfigStore.findTreeEntry(cursor.parentId());
-        }
-        return 0;
+        // Preserve the snapshot only when the selected occurrence belongs to one of its
+        // originally selected targets. An unrelated item starts with no focus.
+        return new MainConfigScreen(entry.value(), entry.id(), null,
+                insideFocusSnapshot ? returnFocusEntryIds : List.of(), -1);
     }
 
     private void deleteSelectedEntries() {
