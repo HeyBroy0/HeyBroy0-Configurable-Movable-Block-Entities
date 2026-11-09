@@ -814,7 +814,7 @@ public final class ChangedBlocksScreen extends Screen {
                 graphics.pose().popMatrix();
             }
 
-            int textX = iconX + 12;
+            int textX = iconX + TREE_INDENT;
             if (bulkMode) {
                 ResponsiveUi.text(graphics, font, selected ? "[x]" : "[ ]", textX, y + 3,
                         selected ? 0xFF86D99B : 0xFFADB6C0);
