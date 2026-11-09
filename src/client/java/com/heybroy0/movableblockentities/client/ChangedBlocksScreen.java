@@ -114,10 +114,22 @@ public final class ChangedBlocksScreen extends Screen {
                 left + 166, top + TOOLBAR_Y, 40, 24,
                 bulkMode ? "Finish bulk selection" : "Bulk select",
                 button -> {
-                    if (!bulkMode) bulkParentId = activeFolderParent();
-                    bulkMode = !bulkMode;
+                    if (!bulkMode) {
+                        bulkMode = true;
+                        bulkParentId = activeFolderParent();
+                        rangeAnchor = findVisibleRowIndex(activeEntryId);
+                    } else {
+                        bulkMode = false;
+                        // Ordinary mode keeps the active item highlighted, not a hidden group.
+                        ConfigStore.TreeEntry keep = selectedItems.get(activeEntryId);
+                        selectedItems.clear();
+                        if (keep != null) selectedItems.put(keep.id(), keep);
+                        bulkParentId = null;
+                        selectionScrollOffset = 0;
+                    }
                     hoveredRow = -1;
                     rebuildVisibleRows();
+                    selectionChanged();
                     refreshToolbar();
                 });
         deleteButton = addButton("", left + 210, top + TOOLBAR_Y, 30, 24,
@@ -200,7 +212,7 @@ public final class ChangedBlocksScreen extends Screen {
         boolean canRename = ConfigStore.isUserTreeEntry(activeEntryId)
                 && selectedItems.size() <= 1;
         ConfigStore.TreeEntry active = activeEntry();
-        boolean canFocus = active != null && selectedItems.size() <= 1;
+        boolean canFocus = !selectedItems.isEmpty() || active != null;
         renameButton.visible = canRename;
         renameButton.active = canRename;
         focusButton.visible = canFocus;
@@ -244,36 +256,34 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void focusSelectedEntry() {
-        ConfigStore.TreeEntry active = activeEntry();
-        if (active == null) return;
-        if (active.type() == ConfigStore.TreeEntryType.BLOCK) {
-            ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(active.id(), active.value());
-            minecraft.gui.setScreen(mainScreenForBlock(touched == null ? active : touched));
-            return;
-        }
-        active = ConfigStore.focusTreeEntry(active.id());
-        if (active == null) return;
-        activeEntrySnapshot = active;
+        java.util.Set<String> selectedIds = new java.util.LinkedHashSet<>(selectedItems.keySet());
+        if (selectedIds.isEmpty() && activeEntryId != null) selectedIds.add(activeEntryId);
+        if (selectedIds.isEmpty()) return;
 
-        List<ConfigStore.TreeEntry> blocks = ConfigStore.blockEntriesUnder(active.id());
-        if (blocks.isEmpty()) return;
-
-        // Navigation targets the whole container first, then direct folders/selectors,
-        // and finally direct block occurrences. Container targets apply to all descendants.
-        List<ConfigStore.TreeEntry> childTargets = ConfigStore.childrenOf(active).stream()
-                .filter(child -> !ConfigStore.blockEntriesUnder(child.id()).isEmpty())
-                .sorted(Comparator.comparingInt((ConfigStore.TreeEntry child) ->
-                                child.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
-                        .thenComparingInt(ConfigStore.TreeEntry::order))
+        List<String> focusTargets = ConfigStore.treeEntriesTopDown().stream()
+                .filter(entry -> selectedIds.contains(entry.id()))
+                .map(ConfigStore.TreeEntry::id)
                 .toList();
-        List<String> focusTargets = new ArrayList<>();
-        focusTargets.add(MainConfigScreen.FOCUS_ALL_PREFIX + active.id());
-        for (ConfigStore.TreeEntry child : childTargets) focusTargets.add(child.id());
+        if (focusTargets.isEmpty()) return;
 
-        ConfigStore.TreeEntry first = blocks.get(0);
-        ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(first.id(), first.value());
-        minecraft.gui.setScreen(new MainConfigScreen(first.value(),
-                touched == null ? first.id() : touched.id(), active.id(), focusTargets, 0));
+        ConfigStore.TreeEntry firstBlock = null;
+        for (String targetId : focusTargets) {
+            ConfigStore.TreeEntry target = ConfigStore.findTreeEntry(targetId);
+            if (target == null) continue;
+            if (target.type() == ConfigStore.TreeEntryType.BLOCK) {
+                firstBlock = target;
+            } else {
+                List<ConfigStore.TreeEntry> contained = ConfigStore.blockEntriesUnder(targetId);
+                if (!contained.isEmpty()) firstBlock = contained.get(0);
+            }
+            if (firstBlock != null) break;
+        }
+        if (firstBlock == null) return;
+
+        // Store the exact selected entries in breadth-first tree order. Directories are
+        // targets in their own right; settings applied to them include their descendants.
+        minecraft.gui.setScreen(new MainConfigScreen(firstBlock.value(), firstBlock.id(),
+                null, focusTargets, -1));
     }
 
     private MainConfigScreen mainScreenForBlock(ConfigStore.TreeEntry entry) {
@@ -577,12 +587,8 @@ public final class ChangedBlocksScreen extends Screen {
             return;
         }
 
-        if (event.hasShiftDown()) {
+        if (bulkMode && event.hasShiftDown()) {
             boolean selectRangeState = !selectedItems.containsKey(entry.id());
-            if (!bulkMode) {
-                if (bulkParentId == null) bulkParentId = activeFolderParent();
-                bulkMode = true;
-            }
             if (rangeAnchor < 0 || rangeAnchor >= visibleRows.size()) rangeAnchor = rowIndex;
             selectRange(rowIndex, selectRangeState);
             activeEntryId = entry.id();
@@ -598,11 +604,11 @@ public final class ChangedBlocksScreen extends Screen {
 
         boolean wasSelected = selectedItems.containsKey(entry.id());
         if (doubleClick) {
-            if (!wasSelected && !bulkMode) clearSelection();
+            if (!bulkMode) clearSelection();
             addSelected(entry);
             pendingDeselect = false;
         } else if (wasSelected) {
-            // Defer deselection until release so dragging any selected row can move the group.
+            // Defer deselection until release so dragging a selected row can move the group.
             pendingDeselect = true;
         } else {
             if (!bulkMode) {
@@ -753,17 +759,19 @@ public final class ChangedBlocksScreen extends Screen {
             ResponsiveUi.text(graphics, font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
             int textX = iconX + 12;
-            ResponsiveUi.text(graphics, font, selected ? "[x]" : "[ ]", textX, y + 3,
-                    selected ? 0xFF86D99B : 0xFFADB6C0);
-            textX += 22;
-            int labelWidth = treeRight - textX - (entry.type() == ConfigStore.TreeEntryType.BLOCK && selectedItems.isEmpty() ? 20 : 5);
+            if (bulkMode) {
+                ResponsiveUi.text(graphics, font, selected ? "[x]" : "[ ]", textX, y + 3,
+                        selected ? 0xFF86D99B : 0xFFADB6C0);
+                textX += 22;
+            }
+            int labelWidth = treeRight - textX - (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode ? 20 : 5);
             int labelColor = switch (entry.type()) {
                 case FOLDER -> 0xFFFFB45C;
                 case SELECTOR -> 0xFF8FC7E8;
                 case BLOCK -> 0xFFE4E8EC;
             };
             ResponsiveUi.text(graphics, font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
-            if (entry.type() == ConfigStore.TreeEntryType.BLOCK && selectedItems.isEmpty()) {
+            if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
                 ResponsiveUi.text(graphics, font, "x", treeRight - 13, y + 3, 0xFFDA8888);
             }
             if (dragging && dragTargetIndex == index && !dragIntoFolder) {
@@ -863,7 +871,7 @@ public final class ChangedBlocksScreen extends Screen {
         int logicalMouseX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
 
-        listWidth = selectedItems.isEmpty() ? 480 : 324;
+        listWidth = bulkMode ? 324 : 480;
         ResponsiveUi.centeredText(graphics, font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
         ResponsiveUi.text(graphics, font, "Compact tree · folders and selectors stay on their page",
                 left + 18, top + 31, 0xFF9FA8B2);
@@ -876,7 +884,7 @@ public final class ChangedBlocksScreen extends Screen {
                     left + (bulkMode ? 180 : PANEL_WIDTH / 2), top + 190, 0xFF9FA8B2);
         }
         renderTree(graphics, logicalMouseX, logicalMouseY);
-        if (!selectedItems.isEmpty()) renderSelectionSidebar(graphics);
+        if (bulkMode) renderSelectionSidebar(graphics);
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
         renderToolbarSymbols(graphics);
         renderTextButtonLabels(graphics);
@@ -894,7 +902,7 @@ public final class ChangedBlocksScreen extends Screen {
             return true;
         }
 
-        if (!selectedItems.isEmpty()) {
+        if (bulkMode && !selectedItems.isEmpty()) {
             int sideX = TREE_X + listWidth + 8;
             if (x >= sideX && x < PANEL_WIDTH - 18 && y >= TREE_Y + 36 && y < TREE_BOTTOM - 14) {
                 int item = (int) ((y - (TREE_Y + 36)) / ROW_HEIGHT) + selectionScrollOffset;
@@ -1028,7 +1036,7 @@ public final class ChangedBlocksScreen extends Screen {
                     treeScrollOffset + (scrollY < 0 ? 1 : -1)));
             return true;
         }
-        if (!selectedItems.isEmpty() && x >= TREE_X + listWidth + 8 && x < PANEL_WIDTH - 18
+        if (bulkMode && !selectedItems.isEmpty() && x >= TREE_X + listWidth + 8 && x < PANEL_WIDTH - 18
                 && y >= TREE_Y && y < TREE_BOTTOM) {
             selectionScrollOffset = Math.max(0, Math.min(
                     Math.max(0, selectedItems.size() - maxSelectionRows()),
