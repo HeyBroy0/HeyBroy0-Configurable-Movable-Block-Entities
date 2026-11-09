@@ -126,22 +126,22 @@ public final class ChangedBlocksScreen extends Screen {
             refreshTree();
         });
         addRenderableWidget(entryNameBox);
-        configDirectoryButton = addButton("📂 Config", left + 386, top + EDIT_Y, 116, 18,
+        configDirectoryButton = addButton("", left + 386, top + EDIT_Y, 116, 18,
                 "Open this mod's config folder", button -> ConfigStore.openConfigDirectory());
 
-        previousButton = addButton("‹ Previous", left + 18, top + FOOTER_Y, 100, 20, button -> {
+        previousButton = addButton("", left + 18, top + FOOTER_Y, 100, 20, button -> {
             page = Math.max(0, page - 1);
             treeScrollOffset = 0;
             rangeAnchor = -1;
             init();
         });
-        nextButton = addButton("Next ›", left + 126, top + FOOTER_Y, 85, 20, button -> {
+        nextButton = addButton("", left + 126, top + FOOTER_Y, 85, 20, button -> {
             page = Math.min(pageCount() - 1, page + 1);
             treeScrollOffset = 0;
             rangeAnchor = -1;
             init();
         });
-        backButton = addButton("Back", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
+        backButton = addButton("", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
                 button -> minecraft.gui.setScreen(new MainConfigScreen(returnBlock)));
 
         refreshToolbar();
@@ -628,11 +628,11 @@ public final class ChangedBlocksScreen extends Screen {
             }
             int iconX = TREE_X + 2 + row.depth() * 12;
             String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
-            graphics.text(font, disclosure, iconX, y + 3, 0xFFB6C0CA);
+            ResponsiveUi.text(graphics, font, disclosure, iconX, y + 3, 0xFFB6C0CA);
 
             int textX = iconX + 12;
             if (bulkMode) {
-                graphics.text(font, selected ? "[x]" : "[ ]", textX, y + 3, selected ? 0xFF86D99B : 0xFFADB6C0);
+                ResponsiveUi.text(graphics, font, selected ? "[x]" : "[ ]", textX, y + 3, selected ? 0xFF86D99B : 0xFFADB6C0);
                 textX += 22;
             }
             int labelWidth = treeRight - textX - (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode ? 20 : 5);
@@ -641,16 +641,16 @@ public final class ChangedBlocksScreen extends Screen {
                 case SELECTOR -> 0xFF8FC7E8;
                 case BLOCK -> 0xFFE4E8EC;
             };
-            graphics.text(font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
+            ResponsiveUi.text(graphics, font, fitText(entryLabel(entry), labelWidth), textX, y + 3, labelColor);
             if (entry.type() == ConfigStore.TreeEntryType.BLOCK && !bulkMode) {
-                graphics.text(font, "x", treeRight - 13, y + 3, 0xFFDA8888);
+                ResponsiveUi.text(graphics, font, "x", treeRight - 13, y + 3, 0xFFDA8888);
             }
             if (dragging && dragTargetIndex == index && !dragIntoFolder) {
                 int markerY = dragAfterTarget ? y + ROW_HEIGHT - 2 : y;
                 graphics.fill(TREE_X - 1, markerY, treeRight, markerY + 2, 0xFF8FC7E8);
             }
         }
-        graphics.text(font, "Drag to reorder · drop on a folder to move · selector members copy when moved out",
+        ResponsiveUi.text(graphics, font, "Drag to reorder · drop on a folder to move · selector members copy when moved out",
                 TREE_X, TREE_BOTTOM + 2, 0xFF87919B);
 
         if (hoveredRow >= treeScrollOffset
@@ -662,7 +662,7 @@ public final class ChangedBlocksScreen extends Screen {
             int tooltipY = Math.min(mouseY + 16, TREE_BOTTOM - 19);
             graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 19, 0xF0101113);
             graphics.outline(tooltipX, tooltipY, tooltipWidth, 17, 0xFF69737D);
-            graphics.text(font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
+            ResponsiveUi.text(graphics, font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
         }
     }
 
@@ -670,8 +670,8 @@ public final class ChangedBlocksScreen extends Screen {
         int x = TREE_X + listWidth + 8;
         graphics.fill(x, TREE_Y - 2, left + PANEL_WIDTH - 18, TREE_BOTTOM, 0xCC171B20);
         graphics.outline(x, TREE_Y - 2, left + PANEL_WIDTH - x - 18, TREE_BOTTOM - TREE_Y + 2, 0xFF4B555F);
-        graphics.text(font, "SELECTED", x + 7, TREE_Y + 5, 0xFFE0E5EA);
-        graphics.text(font, Integer.toString(selectedItems.size()), x + 7, TREE_Y + 19, 0xFF90D5A0);
+        ResponsiveUi.text(graphics, font, "SELECTED", x + 7, TREE_Y + 5, 0xFFE0E5EA);
+        ResponsiveUi.text(graphics, font, Integer.toString(selectedItems.size()), x + 7, TREE_Y + 19, 0xFF90D5A0);
         int visible = 0;
         for (Map.Entry<String, String> selected : selectedItems.entrySet()) {
             if (visible < selectionScrollOffset) {
@@ -681,11 +681,11 @@ public final class ChangedBlocksScreen extends Screen {
             if (visible - selectionScrollOffset >= maxSelectionRows()) break;
             int y = TREE_Y + 36 + (visible - selectionScrollOffset) * ROW_HEIGHT;
             graphics.fill(x + 4, y, left + PANEL_WIDTH - 22, y + ROW_HEIGHT, 0x552E353D);
-            graphics.text(font, fitText(selected.getValue(), left + PANEL_WIDTH - x - 38),
+            ResponsiveUi.text(graphics, font, fitText(selected.getValue(), left + PANEL_WIDTH - x - 38),
                     x + 8, y + 3, 0xFFE0E5EA);
             visible++;
         }
-        graphics.text(font, "Click item to remove", x + 6, TREE_BOTTOM - 13, 0xFF84909B);
+        ResponsiveUi.text(graphics, font, "Click item to remove", x + 6, TREE_BOTTOM - 13, 0xFF84909B);
     }
 
     private void renderToolbarSymbols(GuiGraphicsExtractor graphics) {
@@ -699,13 +699,28 @@ public final class ChangedBlocksScreen extends Screen {
         drawToolbarSymbol(graphics, copyButton, "⧉");
     }
 
+    private void renderTextButtonLabels(GuiGraphicsExtractor graphics) {
+        drawTextButtonLabel(graphics, configDirectoryButton, "📂 Config");
+        drawTextButtonLabel(graphics, previousButton, "‹ Previous");
+        drawTextButtonLabel(graphics, nextButton, "Next ›");
+        drawTextButtonLabel(graphics, backButton, "Back");
+    }
+
+    private void drawTextButtonLabel(GuiGraphicsExtractor graphics, Button button, String label) {
+        if (button == null || !button.visible || label == null || label.isEmpty()) return;
+        ResponsiveUi.centeredText(graphics, font, label,
+                button.getX() + button.getWidth() / 2,
+                button.getY() + Math.max(2, (button.getHeight() - 8) / 2),
+                button.active ? 0xFFFFFFFF : 0xFF777777);
+    }
+
     private void drawToolbarSymbol(GuiGraphicsExtractor graphics, Button button, String symbol) {
         if (button == null || !button.visible) return;
         graphics.pose().pushMatrix();
         graphics.pose().translate(button.getX() + button.getWidth() / 2.0F,
                 button.getY() + (button.getHeight() - 9) / 2.0F);
         graphics.pose().scale(1.55F, 1.55F);
-        graphics.centeredText(font, symbol, 0, 0, button.active ? 0xFFFFFFFF : 0xFF777777);
+        ResponsiveUi.centeredText(graphics, font, symbol, 0, 0, button.active ? 0xFFFFFFFF : 0xFF777777);
         graphics.pose().popMatrix();
     }
 
@@ -727,20 +742,21 @@ public final class ChangedBlocksScreen extends Screen {
 
         listWidth = bulkMode ? 324 : 480;
         ResponsiveUi.centeredText(graphics, font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
-        graphics.text(font, "Compact tree · folders and selectors stay on their page",
+        ResponsiveUi.text(graphics, font, "Compact tree · folders and selectors stay on their page",
                 left + 18, top + 31, 0xFF9FA8B2);
-        graphics.text(font, (hasSearchFilter() ? "Filtered view" : "Root page " + (page + 1) + " / " + pageCount())
+        ResponsiveUi.text(graphics, font, (hasSearchFilter() ? "Filtered view" : "Root page " + (page + 1) + " / " + pageCount())
                 + "  ·  " + ConfigStore.changedBlockIds().size() + " changed blocks",
                 left + 18, top + 92, 0xFFB7C0C9);
 
         if (visibleRows.isEmpty()) {
-            graphics.centeredText(font, "No changed blocks or saved folders yet.",
+            ResponsiveUi.centeredText(graphics, font, "No changed blocks or saved folders yet.",
                     left + (bulkMode ? 180 : PANEL_WIDTH / 2), top + 190, 0xFF9FA8B2);
         }
         renderTree(graphics, logicalMouseX, logicalMouseY);
         if (bulkMode) renderSelectionSidebar(graphics);
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
         renderToolbarSymbols(graphics);
+        renderTextButtonLabels(graphics);
         graphics.pose().popMatrix();
     }
 
