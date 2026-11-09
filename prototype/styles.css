@@ -332,3 +332,5 @@ kbd { display: inline-block; min-width: 16px; padding: 0 3px; text-align: center
   .cube-net { grid-template-columns: repeat(4, 54px); grid-template-rows: repeat(3, 58px); gap: 4px; }
   .face-toggle b { font-size: 16px; }
 }
+
+.changed-list[hidden], .empty-state[hidden] { display: none !important; }
