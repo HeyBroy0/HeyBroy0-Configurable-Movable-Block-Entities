@@ -196,7 +196,7 @@ public final class AdhesionEditorScreen extends Screen {
 
             graphics.fill(x, y, x + FACE_SIZE, y + FACE_SIZE, color);
             graphics.outline(x, y, FACE_SIZE, FACE_SIZE, hovered ? 0xFFFFFFFF : 0xFFCBD1D8);
-            graphics.centeredText(font, faceSymbol(face), x + FACE_SIZE / 2, y + 4, 0xFFFFFFFF);
+            ResponsiveUi.centeredText(graphics, font, faceSymbol(face), x + FACE_SIZE / 2, y + 4, 0xFFFFFFFF);
             graphics.centeredText(font, enabled ? "ON" : "OFF", x + FACE_SIZE / 2, y + 19, 0xFFFFFFFF);
         }
     }
@@ -242,7 +242,7 @@ public final class AdhesionEditorScreen extends Screen {
         graphics.centeredText(font,
                 page == Page.HITBOX ? "HITBOX ADHESION" : "ADVANCED ADHESION",
                 left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
-        graphics.text(font, "Block: " + blockId, left + 22, top + 52, 0xFFBBC3CC);
+        ResponsiveUi.text(graphics, font, "Block: " + blockId, left + 22, top + 52, 0xFFBBC3CC);
         graphics.text(font, "Geometry source", left + 28, top + 93, 0xFFE5E8EB);
         graphics.text(font, "Minimum contact square", left + 28, top + 130, 0xFFE5E8EB);
         graphics.text(font, "Inward depth (voxels)", left + 28, top + 167, 0xFFE5E8EB);
