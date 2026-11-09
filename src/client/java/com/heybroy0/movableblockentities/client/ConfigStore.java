@@ -346,6 +346,14 @@ public final class ConfigStore {
         if (source == null) {
             String blockId = blockIdFromEntryId(sourceId);
             if (blockId == null) return null;
+            if (sourceId.startsWith("tagblock|")) {
+                TreeEntry selector = TREE_ENTRIES.get(parentId);
+                if (selector == null || selector.type() != TreeEntryType.SELECTOR) return null;
+                // Materialize the original virtual row first; the new node then becomes
+                // a second, independently configurable occurrence under the same selector.
+                TREE_ENTRIES.put(sourceId, new TreeEntry(sourceId, TreeEntryType.BLOCK,
+                        blockId, blockId, parentId, nextOrder(parentId), false));
+            }
             return duplicateBlockOccurrence(sourceId, blockId, parentId);
         }
         String newId = "node-" + UUID.randomUUID();
