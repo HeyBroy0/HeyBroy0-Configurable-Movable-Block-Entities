@@ -531,11 +531,6 @@ public final class MainConfigScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
-        super.onClose();
-    }
-
-    @Override
     public boolean keyPressed(KeyEvent event) {
         if (event.key() == InputConstants.KEY_ESCAPE) {
             closeConfiguration();
