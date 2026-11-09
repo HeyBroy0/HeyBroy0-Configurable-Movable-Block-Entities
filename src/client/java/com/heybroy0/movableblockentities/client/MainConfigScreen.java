@@ -509,7 +509,7 @@ public final class MainConfigScreen extends Screen {
                 .map(ConfigStore.TreeEntry::id)
                 .collect(java.util.stream.Collectors.toSet());
         focusEntryIds = focusEntryIds.stream()
-                .filter(id -> available.contains(id) || blockIdFromOccurrenceId(id) != null)
+                .filter(available::contains)
                 .distinct()
                 .toList();
     }
