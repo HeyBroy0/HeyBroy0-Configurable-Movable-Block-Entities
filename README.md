@@ -569,8 +569,12 @@ Do not silently leave a feature partially implemented while describing it as com
 
 Extend vanilla piston movement without unnecessarily replacing vanilla systems. Blocks in the same movement group should be able to validate their survival against their group's intended destination arrangement, while block entities, multiblock structures, scheduled ticks, and redstone behavior remain predictable and compatible.
 
-## Common bugs:
+## Common bugs/mistakes:
 We assumed an ordinary Java interface could safely live inside the same package as Mixin classes. Mixin restricts normal classloading from packages designated for Mixins, so Minecraft rejected the interface when other code tried to reference it.
 We assumed Minecraft 26.3's PistonMovingBlockEntity.finalTick() contained a Level.setBlock() invocation at the expected injection point. The actual method bytecode did not contain a matching invocation at that location, so Mixin found zero targets and aborted startup.
 We assumed the same Level.setBlock() invocation would be available for MixinExtras to wrap inside finalTick(). The transformed method did not expose that invocation as expected, so MixinExtras could not install the wrapper.
 The recurring issue is that we were making assumptions about Minecraft's internal bytecode rather than verifying the actual 26.3 implementation before writing injection points. We should inspect the target methods in the exact Minecraft version and mappings we're building against before choosing Mixin injection strategies.
+Assumed Minecraft 26.3 registry entries used Identifier directly.	Updated code to use ResourceKey<Block> and retrieve its identifier through .identifier().
+Assumed ResourceKey exposed getPath().	Changed to .identifier().getPath().
+Assumed Gradle could access project inside the JAR task's execution-time closure with configuration caching enabled.	Removed the incompatible custom JAR license-renaming logic.
+Assumed Gradle downloads would succeed without retries.	Increased the network timeout to 30 seconds and enabled three retries.
