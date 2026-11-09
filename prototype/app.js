@@ -42,6 +42,7 @@ let storedConfigs = loadStoredConfigs();
 let selectedBlockId = 'minecraft:stone';
 let suggestionResults = [];
 let activeSuggestion = -1;
+let tabSession = null;
 let currentView = 'main';
 let toastTimeout = null;
 
@@ -190,17 +191,9 @@ function filteredSuggestions(value) {
     .slice(0, 8);
 }
 
-function renderSuggestions() {
+function renderSuggestionList() {
   const input = $('#blockSearch');
   const popup = $('#blockSuggestions');
-  const value = input.value;
-  suggestionResults = filteredSuggestions(value);
-
-  if (!value.trim()) {
-    hideSuggestions();
-    return;
-  }
-
   popup.innerHTML = '';
   if (!suggestionResults.length) {
     const empty = document.createElement('div');
@@ -216,18 +209,13 @@ function renderSuggestions() {
       button.setAttribute('aria-selected', String(index === activeSuggestion));
       button.id = 'suggestion-' + index;
       button.innerHTML =
-        '<span class="suggestion-icon" aria-hidden="true">' + block.glyph + '</span>' +
-        '<span class="suggestion-copy"><strong>' + escapeHtml(block.name) + '</strong><small>' + escapeHtml(block.id) + '</small></span>' +
-        (block.id === selectedBlockId ? '<span class="suggestion-meta">CURRENT</span>' : '');
+        '<span class="suggestion-copy"><strong>' + escapeHtml(block.id) + '</strong></span>' +
+        '<span class="suggestion-meta">' + escapeHtml(block.name) + '</span>';
       button.addEventListener('mousedown', (event) => event.preventDefault());
       button.addEventListener('click', () => selectBlock(block.id));
       popup.appendChild(button);
     });
   }
-  const footer = document.createElement('div');
-  footer.className = 'suggestion-footer';
-  footer.innerHTML = '<span>↑ ↓ SELECT</span><span>TAB COMPLETE · ENTER OPEN</span>';
-  popup.appendChild(footer);
   popup.hidden = false;
   input.setAttribute('aria-expanded', 'true');
   if (activeSuggestion >= 0 && suggestionResults[activeSuggestion]) {
@@ -235,6 +223,16 @@ function renderSuggestions() {
   } else {
     input.removeAttribute('aria-activedescendant');
   }
+}
+
+function renderSuggestions() {
+  const value = $('#blockSearch').value;
+  suggestionResults = filteredSuggestions(value);
+  if (!value.trim()) {
+    hideSuggestions();
+    return;
+  }
+  renderSuggestionList();
 }
 
 function escapeHtml(value) {
@@ -248,6 +246,7 @@ function hideSuggestions() {
   $('#blockSearch').setAttribute('aria-expanded', 'false');
   $('#blockSearch').removeAttribute('aria-activedescendant');
   activeSuggestion = -1;
+  tabSession = null;
 }
 
 function moveSuggestion(direction) {
@@ -263,25 +262,44 @@ function moveSuggestion(direction) {
 }
 
 function acceptSuggestion() {
-  const chosen = suggestionResults[activeSuggestion] || suggestionResults[0];
+  const input = $('#blockSearch');
+  const isCycling = tabSession && input.value === tabSession.lastFill;
+  if (!suggestionResults.length) return;
+  if (isCycling && tabSession.results.length) {
+    if (activeSuggestion >= 0 && activeSuggestion !== tabSession.index) {
+      tabSession.index = activeSuggestion;
+    } else {
+      tabSession.index = (tabSession.index + 1) % tabSession.results.length;
+    }
+  } else {
+    tabSession = {
+      query: input.value,
+      results: suggestionResults.slice(),
+      index: activeSuggestion >= 0 ? activeSuggestion : 0,
+      lastFill: ''
+    };
+  }
+  suggestionResults = tabSession.results;
+  activeSuggestion = tabSession.index;
+  const chosen = tabSession.results[tabSession.index];
   if (!chosen) return;
-  $('#blockSearch').value = chosen.id;
-  activeSuggestion = 0;
-  renderSuggestions();
-  $('#blockSearch').focus();
+  input.value = chosen.id;
+  tabSession.lastFill = chosen.id;
+  renderSuggestionList();
+  input.focus();
 }
 
 function commitSearchSelection() {
   const query = $('#blockSearch').value.trim().toLowerCase();
   if (!query) return;
-  const exact = catalog.find((block) => block.id.toLowerCase() === query || block.name.toLowerCase() === query);
-  if (exact) {
-    selectBlock(exact.id);
-    return;
-  }
   const highlighted = suggestionResults[activeSuggestion];
   if (highlighted) {
     selectBlock(highlighted.id);
+    return;
+  }
+  const exact = catalog.find((block) => block.id.toLowerCase() === query || block.name.toLowerCase() === query);
+  if (exact) {
+    selectBlock(exact.id);
     return;
   }
   if (suggestionResults.length === 1) selectBlock(suggestionResults[0].id);
@@ -473,6 +491,7 @@ function initEvents() {
   const search = $('#blockSearch');
   search.addEventListener('input', () => {
     activeSuggestion = -1;
+    tabSession = null;
     renderSuggestions();
   });
   search.addEventListener('keydown', (event) => {
