@@ -1,6 +1,7 @@
 package com.heybroy0.movableblockentities.client;
 
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.Util;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
@@ -37,9 +38,16 @@ public final class ConfigStore {
     private static volatile long behaviorCacheGeneration;
     private static final EffectiveBlockConfig DEFAULT_BEHAVIOR_CONFIG =
             new BlockConfig().snapshot(null);
-    private static final Path FILE = FabricLoader.getInstance().getConfigDir()
-            .resolve("movable-block-entities")
-            .resolve("settings.properties");
+    private static final Path CONFIG_DIRECTORY = FabricLoader.getInstance().getConfigDir()
+            .resolve("movable-block-entities");
+    private static final Path CACHE_DIRECTORY = CONFIG_DIRECTORY.resolve("cache");
+    private static final Path FILE = CONFIG_DIRECTORY.resolve("settings.properties");
+    private static final int HISTORY_LIMIT = 24;
+    private static final Deque<StoreSnapshot> UNDO_HISTORY = new ArrayDeque<>();
+    private static final Deque<StoreSnapshot> REDO_HISTORY = new ArrayDeque<>();
+    private static StoreSnapshot lastHistorySnapshot;
+    private static String lastHistoryFingerprint;
+    private static boolean replayingHistory;
     private static boolean loaded;
 
     private ConfigStore() {}
@@ -47,13 +55,17 @@ public final class ConfigStore {
     public static synchronized void load() {
         if (loaded) return;
         loaded = true;
-        if (!Files.exists(FILE)) return;
+        if (!Files.exists(FILE)) {
+            resetHistoryBaseline();
+            return;
+        }
 
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(FILE)) {
             properties.load(input);
         } catch (IOException exception) {
             System.err.println("[Movable Block Entities] Could not read settings: " + exception.getMessage());
+            resetHistoryBaseline();
             return;
         }
 
@@ -97,6 +109,7 @@ public final class ConfigStore {
             TREE_ENTRIES.put(id, new TreeEntry(id, type, name, value,
                     parent.isBlank() ? null : parent, order, expanded));
         }
+        resetHistoryBaseline();
     }
 
     private static String decodeConfigKey(String encoded, String fallback) {
@@ -256,10 +269,136 @@ public final class ConfigStore {
         return TREE_ENTRIES.get(entryId);
     }
 
+    /** Returns block occurrences contained by a folder/selector in display hierarchy order. */
+    public static synchronized List<TreeEntry> blockEntriesUnder(String entryId) {
+        load();
+        TreeEntry root = TREE_ENTRIES.get(entryId);
+        if (root == null) return List.of();
+        List<TreeEntry> result = new ArrayList<>();
+        if (root.type() == TreeEntryType.BLOCK) return List.of(root);
+        Deque<TreeEntry> pending = new ArrayDeque<>();
+        List<TreeEntry> first = childrenOf(root);
+        for (int i = first.size() - 1; i >= 0; i--) pending.push(first.get(i));
+        while (!pending.isEmpty()) {
+            TreeEntry current = pending.pop();
+            if (current.type() == TreeEntryType.BLOCK) {
+                result.add(current);
+            } else {
+                List<TreeEntry> children = childrenOf(current);
+                for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    /** Deletes selected entries and every descendant, reverting each deleted block occurrence. */
+    public static synchronized void deleteTreeEntries(List<String> entryIds) {
+        load();
+        if (entryIds == null || entryIds.isEmpty()) return;
+        java.util.Set<String> removeIds = new java.util.LinkedHashSet<>();
+        Deque<String> pending = new ArrayDeque<>(entryIds);
+        while (!pending.isEmpty()) {
+            String id = pending.pop();
+            if (id == null || id.isBlank() || !removeIds.add(id)) continue;
+            TreeEntry entry = TREE_ENTRIES.get(id);
+            if (entry != null && entry.type() != TreeEntryType.BLOCK) {
+                for (TreeEntry child : childrenOf(entry)) pending.push(child.id());
+            }
+        }
+
+        for (String id : removeIds) {
+            TreeEntry entry = TREE_ENTRIES.get(id);
+            if (entry != null && entry.type() == TreeEntryType.BLOCK) {
+                TreeEntry topmost = findTopmostBlockEntry(entry.value());
+                if (topmost != null && topmost.id().equals(id)) BLOCKS.remove(entry.value());
+            } else if (id.startsWith("block|")) {
+                String blockId = id.substring("block|".length());
+                TreeEntry topmost = findTopmostBlockEntry(blockId);
+                if (topmost == null || topmost.id().equals(id)) BLOCKS.remove(blockId);
+            }
+            BLOCKS.remove(id);
+            TREE_ENTRIES.remove(id);
+        }
+        save();
+    }
+
+    /** Copies selected entries in place, preserving folder hierarchy and per-occurrence settings. */
+    public static synchronized List<String> copyTreeEntries(List<String> entryIds) {
+        load();
+        if (entryIds == null || entryIds.isEmpty()) return List.of();
+        java.util.Set<String> selected = new java.util.LinkedHashSet<>(entryIds);
+        List<String> copies = new ArrayList<>();
+        for (String id : entryIds) {
+            TreeEntry source = TREE_ENTRIES.get(id);
+            if (source != null && hasSelectedAncestor(source, selected)) continue;
+            String copied = duplicateTreeEntry(id, source == null ? null : source.parentId());
+            if (copied != null) copies.add(copied);
+        }
+        if (!copies.isEmpty()) save();
+        return List.copyOf(copies);
+    }
+
+    private static String duplicateTreeEntry(String sourceId, String parentId) {
+        TreeEntry source = TREE_ENTRIES.get(sourceId);
+        if (source == null) {
+            String blockId = blockIdFromEntryId(sourceId);
+            if (blockId == null) return null;
+            return duplicateBlockOccurrence(sourceId, blockId, parentId);
+        }
+        String newId = "node-" + UUID.randomUUID();
+        TreeEntry copy = new TreeEntry(newId, source.type(), source.name(), source.value(),
+                parentId, nextOrder(parentId), source.expanded());
+        TREE_ENTRIES.put(newId, copy);
+        if (source.type() == TreeEntryType.BLOCK) {
+            copyOccurrenceConfig(source.id(), newId, source.value());
+        } else if (source.type() == TreeEntryType.FOLDER) {
+            for (TreeEntry child : childrenOf(source)) {
+                if (TREE_ENTRIES.containsKey(child.id())) duplicateTreeEntry(child.id(), newId);
+            }
+        } else if (source.type() == TreeEntryType.SELECTOR) {
+            // A copied selector resolves the same live tag membership. Only explicit children
+            // are copied; generated tag members are supplied by childrenOf() automatically.
+            for (TreeEntry child : childrenOf(source)) {
+                if (TREE_ENTRIES.containsKey(child.id())) duplicateTreeEntry(child.id(), newId);
+            }
+        }
+        return newId;
+    }
+
+    private static String duplicateBlockOccurrence(String sourceId, String blockId, String parentId) {
+        String newId = "node-" + UUID.randomUUID();
+        TREE_ENTRIES.put(newId, new TreeEntry(newId, TreeEntryType.BLOCK, blockId, blockId,
+                parentId, nextOrder(parentId), false));
+        copyOccurrenceConfig(sourceId, newId, blockId);
+        return newId;
+    }
+
+    private static void copyOccurrenceConfig(String sourceId, String targetId, String blockId) {
+        BlockConfig source = BLOCKS.get(sourceId);
+        if (source == null) {
+            TreeEntry topmost = findTopmostBlockEntry(blockId);
+            if (topmost != null && topmost.id().equals(sourceId)) source = BLOCKS.get(blockId);
+        }
+        if (source != null) BLOCKS.put(targetId, source.copyFor(blockId));
+    }
+
+    public static Path configDirectory() {
+        return CONFIG_DIRECTORY;
+    }
+
+    public static synchronized void openConfigDirectory() {
+        try {
+            Files.createDirectories(CONFIG_DIRECTORY);
+            Util.getPlatform().openFile(CONFIG_DIRECTORY.toFile());
+        } catch (Exception exception) {
+            System.err.println("[Movable Block Entities] Could not open config directory: " + exception.getMessage());
+        }
+    }
+
     public static synchronized boolean isUserTreeEntry(String entryId) {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
-        return entry != null && (entry.type() == TreeEntryType.FOLDER || entry.type() == TreeEntryType.SELECTOR);
+        return entry != null && entry.type() == TreeEntryType.FOLDER;
     }
 
     public static synchronized TreeEntry addTagSelector(String tagId, String requestedName, String parentId) {
@@ -384,9 +523,9 @@ public final class ConfigStore {
     public static synchronized void renameTreeEntry(String entryId, String name) {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
-        if (entry == null || (entry.type() != TreeEntryType.FOLDER && entry.type() != TreeEntryType.SELECTOR)
+        if (entry == null || entry.type() != TreeEntryType.FOLDER
                 || name == null || name.isBlank()) return;
-        TREE_ENTRIES.put(entryId, moveToTop(entry.withName(name.trim())));
+        TREE_ENTRIES.put(entryId, entry.withName(name.trim()));
         save();
     }
 
@@ -394,7 +533,8 @@ public final class ConfigStore {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
         if (entry == null || entry.type() == TreeEntryType.BLOCK) return;
-        TREE_ENTRIES.put(entryId, moveToTop(entry.withExpanded(!entry.expanded())));
+        // Expansion is a view-state change only. It must never alter sibling priority.
+        TREE_ENTRIES.put(entryId, entry.withExpanded(!entry.expanded()));
         save();
     }
 
@@ -704,8 +844,93 @@ public final class ConfigStore {
         revertInstance(blockId, blockId);
     }
 
+    public static synchronized boolean canUndo() {
+        load();
+        return !UNDO_HISTORY.isEmpty();
+    }
+
+    public static synchronized boolean canRedo() {
+        load();
+        return !REDO_HISTORY.isEmpty();
+    }
+
+    public static synchronized boolean undo() {
+        load();
+        if (UNDO_HISTORY.isEmpty()) return false;
+        REDO_HISTORY.addLast(captureSnapshot());
+        restoreHistorySnapshot(UNDO_HISTORY.removeLast());
+        return true;
+    }
+
+    public static synchronized boolean redo() {
+        load();
+        if (REDO_HISTORY.isEmpty()) return false;
+        UNDO_HISTORY.addLast(captureSnapshot());
+        restoreHistorySnapshot(REDO_HISTORY.removeLast());
+        return true;
+    }
+
+    private static void resetHistoryBaseline() {
+        lastHistorySnapshot = captureSnapshot();
+        lastHistoryFingerprint = stateFingerprint();
+        UNDO_HISTORY.clear();
+        REDO_HISTORY.clear();
+    }
+
+    private static StoreSnapshot captureSnapshot() {
+        Map<String, BlockConfig> blocks = new TreeMap<>();
+        BLOCKS.forEach((key, value) -> blocks.put(key,
+                value.copyFor(value.blockId == null ? key : value.blockId)));
+        return new StoreSnapshot(blocks, new LinkedHashMap<>(TREE_ENTRIES));
+    }
+
+    private static void restoreHistorySnapshot(StoreSnapshot snapshot) {
+        BLOCKS.clear();
+        snapshot.blocks().forEach((key, value) -> BLOCKS.put(key,
+                value.copyFor(value.blockId == null ? key : value.blockId)));
+        TREE_ENTRIES.clear();
+        TREE_ENTRIES.putAll(snapshot.entries());
+        replayingHistory = true;
+        try {
+            save();
+        } finally {
+            replayingHistory = false;
+        }
+        lastHistorySnapshot = captureSnapshot();
+        lastHistoryFingerprint = stateFingerprint();
+    }
+
+    private static String stateFingerprint() {
+        StringBuilder value = new StringBuilder();
+        new TreeMap<>(BLOCKS).forEach((key, config) -> {
+            value.append("B:").append(key).append('|').append(config.blockId).append('|')
+                    .append(config.movement).append('|').append(config.scheduledTicks).append('|')
+                    .append(config.pushCost).append('|').append(config.adhesion).append('|')
+                    .append(config.geometrySource).append('|').append(config.minimumSquare).append('|')
+                    .append(config.depth).append('|').append(config.orientation).append('|')
+                    .append(config.leadDirection).append('|').append(config.faces).append('\n');
+        });
+        new TreeMap<>(TREE_ENTRIES).forEach((key, entry) ->
+                value.append("T:").append(key).append('|').append(entry.type()).append('|')
+                        .append(entry.name()).append('|').append(entry.value()).append('|')
+                        .append(entry.parentId()).append('|').append(entry.order()).append('|')
+                        .append(entry.expanded()).append('\n'));
+        return value.toString();
+    }
+
     public static synchronized void save() {
         load();
+        if (!replayingHistory) {
+            String fingerprint = stateFingerprint();
+            if (lastHistorySnapshot != null && lastHistoryFingerprint != null
+                    && !fingerprint.equals(lastHistoryFingerprint)) {
+                UNDO_HISTORY.addLast(lastHistorySnapshot);
+                while (UNDO_HISTORY.size() > HISTORY_LIMIT) UNDO_HISTORY.removeFirst();
+                REDO_HISTORY.clear();
+            }
+            lastHistorySnapshot = captureSnapshot();
+            lastHistoryFingerprint = fingerprint;
+        }
         // Persist implicit root occurrences only after they acquire non-default settings.
         for (Map.Entry<String, BlockConfig> block : BLOCKS.entrySet()) {
             String entryId = block.getKey();
@@ -768,6 +993,8 @@ public final class ConfigStore {
             System.err.println("[Movable Block Entities] Could not save settings: " + exception.getMessage());
         }
     }
+
+    private record StoreSnapshot(Map<String, BlockConfig> blocks, Map<String, TreeEntry> entries) {}
 
     private static int readInt(Properties properties, String key, int fallback) {
         try { return Integer.parseInt(properties.getProperty(key, Integer.toString(fallback))); }
