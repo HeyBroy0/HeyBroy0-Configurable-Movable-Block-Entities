@@ -279,33 +279,34 @@ public final class ChangedBlocksScreen extends Screen {
                 : activeEntryId == null ? List.of() : List.of(activeEntryId);
         if (ids.isEmpty()) return;
         List<String> copies = ConfigStore.copyTreeEntries(ids);
-        selectedItems.clear();
-        activeEntryId = copies.isEmpty() ? activeEntryId : copies.get(copies.size() - 1);
+        clearSelection();
+        activeEntryId = copies.isEmpty() ? null : copies.get(copies.size() - 1);
         activeEntrySnapshot = activeEntryId == null ? null : ConfigStore.findTreeEntry(activeEntryId);
+        addSelected(activeEntrySnapshot);
         rangeAnchor = -1;
+        selectionChanged();
         refreshTree();
-        refreshToolbar();
     }
 
     private void runUndo() {
         if (ConfigStore.undo()) {
-            selectedItems.clear();
+            clearSelection();
             activeEntryId = null;
             activeEntrySnapshot = null;
             rangeAnchor = -1;
+            selectionChanged();
             refreshTree();
-            refreshToolbar();
         }
     }
 
     private void runRedo() {
         if (ConfigStore.redo()) {
-            selectedItems.clear();
+            clearSelection();
             activeEntryId = null;
             activeEntrySnapshot = null;
             rangeAnchor = -1;
+            selectionChanged();
             refreshTree();
-            refreshToolbar();
         }
     }
 
@@ -314,6 +315,11 @@ public final class ChangedBlocksScreen extends Screen {
         String name = entryDraft.trim();
         if (name.isBlank()) return;
         ConfigStore.renameTreeEntry(activeEntryId, name);
+        ConfigStore.TreeEntry renamed = ConfigStore.findTreeEntry(activeEntryId);
+        if (renamed != null && selectedItems.containsKey(activeEntryId)) {
+            selectedItems.put(activeEntryId, renamed);
+        }
+        activeEntrySnapshot = renamed;
         entryDraft = "";
         init();
     }
@@ -468,7 +474,7 @@ public final class ChangedBlocksScreen extends Screen {
         } else {
             selectionScrollOffset = Math.max(0, Math.min(selectionScrollOffset,
                     Math.max(0, selectedItems.size() - maxSelectionRows())));
-            if (!selectedItems.containsKey(activeEntryId)) {
+            if (activeEntryId == null || !selectedItems.containsKey(activeEntryId)) {
                 ConfigStore.TreeEntry remaining = selectedItems.values().stream()
                         .reduce((first, second) -> second).orElse(null);
                 activeEntrySnapshot = remaining;
