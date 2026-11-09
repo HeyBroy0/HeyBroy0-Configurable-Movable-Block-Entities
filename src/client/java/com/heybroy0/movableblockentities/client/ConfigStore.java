@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /** Client-side persistence for the GUI prototype. No piston hooks read this yet. */
@@ -57,6 +58,8 @@ public final class ConfigStore {
 
             String prefix = "block." + encoded + ".";
             BlockConfig config = new BlockConfig();
+            config.blockId = id;
+            String configKey = decodeConfigKey(encoded, id);
             config.movement = readEnum(properties, prefix + "movement", Movement.class, Movement.VANILLA);
             config.scheduledTicks = readEnum(properties, prefix + "scheduledTicks", ScheduledTicks.class, ScheduledTicks.VANILLA);
             config.pushCost = Math.max(1, readInt(properties, prefix + "pushCost", 1));
@@ -69,7 +72,7 @@ public final class ConfigStore {
             for (Face face : Face.values()) {
                 config.faces.put(face, Boolean.parseBoolean(properties.getProperty(prefix + "face." + face.name(), "false")));
             }
-            BLOCKS.put(id, config);
+            BLOCKS.put(configKey, config);
         }
 
         for (String property : properties.stringPropertyNames()) {
@@ -89,19 +92,58 @@ public final class ConfigStore {
         }
     }
 
+    private static String decodeConfigKey(String encoded, String fallback) {
+        try {
+            return new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ignored) {
+            return fallback;
+        }
+    }
+
     public static synchronized BlockConfig get(String blockId) {
         load();
-        return BLOCKS.computeIfAbsent(blockId, ignored -> new BlockConfig());
+        BlockConfig config = BLOCKS.computeIfAbsent(blockId, ignored -> new BlockConfig());
+        config.blockId = blockId;
+        return config;
+    }
+
+    /** Gets settings belonging to one visible occurrence of a block, not every occurrence. */
+    public static synchronized BlockConfig get(String blockId, String entryId) {
+        load();
+        if (entryId == null || entryId.isBlank()) return get(blockId);
+
+        BlockConfig config = BLOCKS.get(entryId);
+        if (config == null) {
+            config = new BlockConfig();
+            TreeEntry topmost = findTopmostBlockEntry(blockId);
+            // Migrate an old per-block config only into the occurrence that has precedence.
+            if (topmost != null && topmost.id().equals(entryId)) {
+                BlockConfig legacy = BLOCKS.remove(blockId);
+                if (legacy != null) config = legacy;
+            }
+            config.blockId = blockId;
+            BLOCKS.put(entryId, config);
+        } else {
+            config.blockId = blockId;
+        }
+        return config;
+    }
+
+    /** Returns the topmost occurrence's settings, falling back to the legacy block-wide record. */
+    public static synchronized BlockConfig getEffective(String blockId) {
+        TreeEntry topmost = findTopmostBlockEntry(blockId);
+        return topmost == null ? get(blockId) : get(blockId, topmost.id());
     }
 
     public static synchronized List<String> changedBlockIds() {
         load();
-        List<String> result = new ArrayList<>();
-        BLOCKS.forEach((id, config) -> {
-            if (config.isChanged()) result.add(id);
+        TreeSet<String> result = new TreeSet<>();
+        BLOCKS.values().forEach(config -> {
+            if (config.isChanged() && config.blockId != null && !config.blockId.isBlank()) {
+                result.add(config.blockId);
+            }
         });
-        result.sort(Comparator.naturalOrder());
-        return result;
+        return List.copyOf(result);
     }
 
     /** Returns the active block-tag ids, matched against their full namespaced id. */
@@ -178,16 +220,27 @@ public final class ConfigStore {
 
         List<TreeEntry> result = new ArrayList<>();
         if (parent.type() == TreeEntryType.SELECTOR) {
-            int order = 0;
+            java.util.Set<String> explicitMembers = new java.util.HashSet<>();
+            for (TreeEntry entry : TREE_ENTRIES.values()) {
+                if (entry.type() == TreeEntryType.BLOCK && Objects.equals(entry.parentId(), parent.id())) {
+                    explicitMembers.add(entry.value());
+                }
+            }
+            int order = 1_000_000;
             for (String blockId : blockTagMembers(parent.value())) {
-                result.add(new TreeEntry(tagBlockEntryId(parent.id(), blockId),
-                        TreeEntryType.BLOCK, blockId, blockId, parent.id(), order++, false));
+                // A materialized occurrence keeps its own identity/order and replaces only
+                // the generated row for this exact selector occurrence.
+                if (!explicitMembers.contains(blockId)) {
+                    result.add(new TreeEntry(tagBlockEntryId(parent.id(), blockId),
+                            TreeEntryType.BLOCK, blockId, blockId, parent.id(), order++, false));
+                }
             }
         }
         for (TreeEntry entry : TREE_ENTRIES.values()) {
             if (Objects.equals(entry.parentId(), parent.id())) result.add(entry);
         }
-        result.sort(Comparator.comparingInt(TreeEntry::order).thenComparing(TreeEntry::name));
+        result.sort(Comparator.comparingInt(TreeEntry::order)
+                .thenComparing(TreeEntry::name).thenComparing(TreeEntry::id));
         return List.copyOf(result);
     }
 
@@ -215,7 +268,7 @@ public final class ConfigStore {
         String id = "node-" + UUID.randomUUID();
         String name = requestedName == null || requestedName.isBlank() ? "#" + normalized : requestedName.trim();
         TreeEntry entry = new TreeEntry(id, TreeEntryType.SELECTOR, name, normalized,
-                safeParent, nextOrder(safeParent), false);
+                safeParent, topOrder(safeParent), false);
         TREE_ENTRIES.put(id, entry);
         save();
         return entry;
@@ -227,21 +280,31 @@ public final class ConfigStore {
         String id = "node-" + UUID.randomUUID();
         String safeName = name == null || name.isBlank() ? "New folder" : name.trim();
         TreeEntry folder = new TreeEntry(id, TreeEntryType.FOLDER, safeName, "",
-                safeParent, nextOrder(safeParent), true);
+                safeParent, topOrder(safeParent), true);
         TREE_ENTRIES.put(id, folder);
 
-        if (selectedEntryIds != null) {
-            for (String selectedId : selectedEntryIds) {
+        java.util.Set<String> selected = selectedEntryIds == null
+                ? java.util.Set.of() : new java.util.LinkedHashSet<>(selectedEntryIds);
+        if (!selected.isEmpty()) {
+            for (String selectedId : selected) {
                 if (selectedId == null || selectedId.isBlank() || selectedId.equals(id)) continue;
                 TreeEntry existing = TREE_ENTRIES.get(selectedId);
                 if (existing != null) {
-                    if (!Objects.equals(existing.parentId(), id) && !isDescendantOf(id, existing.id())) {
+                    // If both a container and its descendant are selected, moving the container
+                    // carries the descendant with it. Do not detach the descendant as a sibling.
+                    if (hasSelectedAncestor(existing, selected)) continue;
+                    if (!Objects.equals(existing.parentId(), id)) {
                         TREE_ENTRIES.put(existing.id(), existing.withParent(id, nextOrder(id)));
                     }
                     continue;
                 }
+
                 String blockId = blockIdFromEntryId(selectedId);
-                if (blockId != null) moveBlockNode(blockId, id);
+                if (blockId != null) {
+                    // Generated selector/root rows are occurrences too. Copy them into the folder
+                    // instead of finding and moving an unrelated occurrence with the same block id.
+                    copyBlockNode(blockId, selectedId, id);
+                }
             }
         }
         save();
@@ -252,17 +315,24 @@ public final class ConfigStore {
         return addTagSelector(tagId, null, parentId);
     }
 
-    private static void moveBlockNode(String blockId, String parentId) {
-        TreeEntry existing = TREE_ENTRIES.values().stream()
-                .filter(entry -> entry.type() == TreeEntryType.BLOCK && entry.value().equals(blockId))
-                .findFirst().orElse(null);
-        if (existing != null) {
-            TREE_ENTRIES.put(existing.id(), existing.withParent(parentId, nextOrder(parentId)));
-        } else {
-            String id = "node-" + UUID.randomUUID();
-            TREE_ENTRIES.put(id, new TreeEntry(id, TreeEntryType.BLOCK, blockId, blockId,
-                    parentId, nextOrder(parentId), false));
+    private static void copyBlockNode(String blockId, String sourceEntryId, String parentId) {
+        String id = "node-" + UUID.randomUUID();
+        TREE_ENTRIES.put(id, new TreeEntry(id, TreeEntryType.BLOCK, blockId, blockId,
+                parentId, nextOrder(parentId), false));
+
+        BlockConfig source = BLOCKS.get(sourceEntryId);
+        if (source == null) source = BLOCKS.get(blockId);
+        if (source != null) BLOCKS.put(id, source.copyFor(blockId));
+    }
+
+    private static boolean hasSelectedAncestor(TreeEntry entry, java.util.Set<String> selected) {
+        String parentId = entry.parentId();
+        while (parentId != null) {
+            if (selected.contains(parentId)) return true;
+            TreeEntry parent = TREE_ENTRIES.get(parentId);
+            parentId = parent == null ? null : parent.parentId();
         }
+        return false;
     }
 
     private static String blockIdFromEntryId(String entryId) {
@@ -279,7 +349,7 @@ public final class ConfigStore {
         TreeEntry entry = TREE_ENTRIES.get(entryId);
         if (entry == null || (entry.type() != TreeEntryType.FOLDER && entry.type() != TreeEntryType.SELECTOR)
                 || name == null || name.isBlank()) return;
-        TREE_ENTRIES.put(entryId, entry.withName(name.trim()));
+        TREE_ENTRIES.put(entryId, moveToTop(entry.withName(name.trim())));
         save();
     }
 
@@ -287,8 +357,69 @@ public final class ConfigStore {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
         if (entry == null || entry.type() == TreeEntryType.BLOCK) return;
-        TREE_ENTRIES.put(entryId, entry.withExpanded(!entry.expanded()));
+        TREE_ENTRIES.put(entryId, moveToTop(entry.withExpanded(!entry.expanded())));
         save();
+    }
+
+    /** Materializes and moves one exact occurrence to the top of its own directory. */
+    public static synchronized TreeEntry touchTreeEntry(String entryId, String blockId) {
+        load();
+        TreeEntry entry = TREE_ENTRIES.get(entryId);
+        if (entry == null && blockId != null) {
+            String parentId = null;
+            if (entryId != null && entryId.startsWith("tagblock|")) {
+                int separator = entryId.indexOf('|', "tagblock|".length());
+                if (separator > 0) {
+                    parentId = entryId.substring("tagblock|".length(), separator);
+                    TreeEntry parent = TREE_ENTRIES.get(parentId);
+                    if (parent == null || parent.type() != TreeEntryType.SELECTOR) return null;
+                }
+            } else if (entryId == null || !entryId.startsWith("block|")) {
+                return null;
+            }
+            String safeId = entryId == null ? "node-" + UUID.randomUUID() : entryId;
+            entry = new TreeEntry(safeId, TreeEntryType.BLOCK, blockId, blockId,
+                    parentId, topOrder(parentId), false);
+            TREE_ENTRIES.put(safeId, entry);
+        }
+        if (entry == null) return null;
+
+        TreeEntry top = moveToTop(entry);
+        TREE_ENTRIES.put(top.id(), top);
+        save();
+        return top;
+    }
+
+    public static synchronized TreeEntry findTopmostBlockEntry(String blockId) {
+        load();
+        for (TreeEntry root : rootEntries()) {
+            TreeEntry found = findTopmostBlockEntry(root, blockId);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static TreeEntry findTopmostBlockEntry(TreeEntry entry, String blockId) {
+        if (entry.type() == TreeEntryType.BLOCK && entry.value().equals(blockId)) return entry;
+        for (TreeEntry child : childrenOf(entry)) {
+            TreeEntry found = findTopmostBlockEntry(child, blockId);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static TreeEntry moveToTop(TreeEntry entry) {
+        int minimum = TREE_ENTRIES.values().stream()
+                .filter(other -> Objects.equals(other.parentId(), entry.parentId()))
+                .mapToInt(TreeEntry::order).min().orElse(entry.order());
+        if (entry.order() <= minimum) return entry;
+        return entry.withParent(entry.parentId(), minimum - 1);
+    }
+
+    private static int topOrder(String parentId) {
+        return TREE_ENTRIES.values().stream()
+                .filter(entry -> Objects.equals(entry.parentId(), parentId))
+                .mapToInt(TreeEntry::order).min().orElse(0) - 1;
     }
 
     private static boolean isDescendantOf(String possibleAncestorId, String entryId) {
@@ -320,24 +451,33 @@ public final class ConfigStore {
         return "tagblock|" + selectorId + "|" + blockId;
     }
 
-    public static synchronized void revert(String blockId) {
+    /** Reverts one occurrence without deleting any other copy of the same block. */
+    public static synchronized void revertInstance(String blockId, String entryId) {
         load();
-        BLOCKS.remove(blockId);
-        TREE_ENTRIES.values().removeIf(entry ->
-                entry.type() == TreeEntryType.BLOCK && entry.value().equals(blockId));
+        if (entryId != null && !entryId.isBlank()) {
+            BlockConfig removed = BLOCKS.remove(entryId);
+            if (removed == null) BLOCKS.remove(blockId);
+        } else {
+            BLOCKS.remove(blockId);
+        }
         save();
+    }
+
+    /** Legacy block-wide reset; retained for callers predating instance-scoped settings. */
+    public static synchronized void revert(String blockId) {
+        revertInstance(blockId, blockId);
     }
 
     public static synchronized void save() {
         load();
         Properties properties = new Properties();
-        properties.setProperty("format.version", "2");
+        properties.setProperty("format.version", "3");
         BLOCKS.forEach((id, config) -> {
             if (!config.isChanged()) return;
             String encoded = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(id.getBytes(StandardCharsets.UTF_8));
             String prefix = "block." + encoded + ".";
-            properties.setProperty(prefix + "id", id);
+            properties.setProperty(prefix + "id", config.blockId == null ? id : config.blockId);
             properties.setProperty(prefix + "movement", config.movement.name());
             properties.setProperty(prefix + "scheduledTicks", config.scheduledTicks.name());
             properties.setProperty(prefix + "pushCost", Integer.toString(config.pushCost));
@@ -368,7 +508,7 @@ public final class ConfigStore {
             Files.createDirectories(FILE.getParent());
             Path temporary = FILE.resolveSibling(FILE.getFileName() + ".tmp");
             try (OutputStream output = Files.newOutputStream(temporary)) {
-                properties.store(output, "Configurable Movable Block Entities - GUI prototype (format v2)");
+                properties.store(output, "Configurable Movable Block Entities - GUI prototype (format v3)");
             }
             try {
                 Files.move(temporary, FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -415,6 +555,7 @@ public final class ConfigStore {
     public enum Face { FRONT, BACK, LEFT, RIGHT, UP, DOWN }
 
     public static final class BlockConfig {
+        public String blockId;
         public Movement movement = Movement.VANILLA;
         public ScheduledTicks scheduledTicks = ScheduledTicks.VANILLA;
         public int pushCost = 1;
@@ -428,6 +569,23 @@ public final class ConfigStore {
 
         public BlockConfig() {
             for (Face face : Face.values()) faces.put(face, false);
+        }
+
+        public BlockConfig copyFor(String newBlockId) {
+            BlockConfig copy = new BlockConfig();
+            copy.blockId = newBlockId;
+            copy.movement = movement;
+            copy.scheduledTicks = scheduledTicks;
+            copy.pushCost = pushCost;
+            copy.adhesion = adhesion;
+            copy.geometrySource = geometrySource;
+            copy.minimumSquare = minimumSquare;
+            copy.depth = depth;
+            copy.orientation = orientation;
+            copy.leadDirection = leadDirection;
+            copy.faces.clear();
+            copy.faces.putAll(faces);
+            return copy;
         }
 
         public boolean isChanged() {
