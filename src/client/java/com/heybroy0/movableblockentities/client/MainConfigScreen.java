@@ -455,7 +455,7 @@ public final class MainConfigScreen extends Screen {
             if (selector != null) {
                 focusEntryIds = List.of(selector.id());
                 minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
-                        0, null, focusEntryIds, -1));
+                        0, focusEntryIds));
             }
             return;
         }
@@ -532,7 +532,6 @@ public final class MainConfigScreen extends Screen {
 
     @Override
     public void onClose() {
-        ConfigStore.rebuildBehaviorCache();
         super.onClose();
     }
 
