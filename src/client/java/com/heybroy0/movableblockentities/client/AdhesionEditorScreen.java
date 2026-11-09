@@ -202,8 +202,8 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void saveAndRefresh() {
-        ConfigStore.save();
         if (!focusEntryIds.isEmpty()) ConfigStore.applyConfigToEntries(config, focusEntryIds);
+        else ConfigStore.save();
         refreshLabels();
     }
 
