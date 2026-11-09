@@ -16,13 +16,13 @@ import static com.heybroy0.movableblockentities.client.ConfigStore.*;
 public final class AdhesionEditorScreen extends Screen {
     public enum Page { HITBOX, ADVANCED }
 
-    private static final int PANEL_WIDTH = 540;
-    private static final int PANEL_HEIGHT = 418;
+    private static final int PANEL_WIDTH = 520;
+    private static final int PANEL_HEIGHT = 350;
     private static final int FACE_SIZE = 34;
     private static final int FACE_GAP = 4;
     private static final int NET_WIDTH = FACE_SIZE * 4 + FACE_GAP * 3;
-    private static final int NET_LEFT = (PANEL_WIDTH - NET_WIDTH) / 2;
-    private static final int NET_TOP = 286;
+    private static final int NET_LEFT = PANEL_WIDTH - NET_WIDTH - 24;
+    private static final int NET_TOP = 145;
 
     private static final int FACE_ENABLED = 0xFF2F8F58;
     private static final int FACE_DISABLED = 0xFF963F45;
@@ -33,6 +33,7 @@ public final class AdhesionEditorScreen extends Screen {
     private final String entryId;
     private final Page page;
     private final BlockConfig config;
+    private final java.util.List<String> focusEntryIds;
     private int left;
     private int top;
     private Button geometryButton;
@@ -40,14 +41,20 @@ public final class AdhesionEditorScreen extends Screen {
     private Button leadButton;
 
     public AdhesionEditorScreen(String blockId, Page page) {
-        this(blockId, null, page);
+        this(blockId, null, page, java.util.List.of());
     }
 
     public AdhesionEditorScreen(String blockId, String entryId, Page page) {
+        this(blockId, entryId, page, java.util.List.of());
+    }
+
+    public AdhesionEditorScreen(String blockId, String entryId, Page page,
+                                java.util.List<String> focusEntryIds) {
         super(Component.literal(page == Page.HITBOX ? "Hitbox Adhesion Settings" : "Advanced Adhesion Settings"));
         this.blockId = blockId;
         this.entryId = entryId;
         this.page = page;
+        this.focusEntryIds = focusEntryIds == null ? java.util.List.of() : java.util.List.copyOf(focusEntryIds);
         this.config = entryId == null ? ConfigStore.get(blockId) : ConfigStore.get(blockId, entryId);
     }
 
@@ -60,37 +67,39 @@ public final class AdhesionEditorScreen extends Screen {
         addButton("Back", 12, 8, 72, 22, button -> returnToMain());
         addButton("Done", PANEL_WIDTH - 84, 8, 72, 22, button -> returnToMain());
 
-        geometryButton = addButton("", left + 255, top + 86, 220, 22, button -> {
+        int controlX = 190;
+        int controlWidth = page == Page.ADVANCED ? 132 : 220;
+        geometryButton = addButton("", left + controlX, top + 86, controlWidth, 22, button -> {
             GeometrySource[] values = GeometrySource.values();
             config.geometrySource = values[(config.geometrySource.ordinal() + 1) % values.length];
             saveAndRefresh();
         });
 
-        addButton("−", left + 255, top + 123, 28, 22, button -> {
+        addButton("−", left + controlX, top + 123, 28, 22, button -> {
             config.minimumSquare = Math.max(1, config.minimumSquare - 1);
             saveAndRefresh();
         });
-        addButton("+", left + 447, top + 123, 28, 22, button -> {
+        addButton("+", left + controlX + controlWidth - 28, top + 123, 28, 22, button -> {
             config.minimumSquare = Math.min(16, config.minimumSquare + 1);
             saveAndRefresh();
         });
 
-        addButton("−", left + 255, top + 160, 28, 22, button -> {
+        addButton("−", left + controlX, top + 160, 28, 22, button -> {
             config.depth = Math.max(1, config.depth - 1);
             saveAndRefresh();
         });
-        addButton("+", left + 447, top + 160, 28, 22, button -> {
+        addButton("+", left + controlX + controlWidth - 28, top + 160, 28, 22, button -> {
             config.depth = Math.min(16, config.depth + 1);
             saveAndRefresh();
         });
 
         if (page == Page.ADVANCED) {
-            orientationButton = addButton("", left + 255, top + 197, 220, 22, button -> {
+            orientationButton = addButton("", left + controlX, top + 197, controlWidth, 22, button -> {
                 Orientation[] values = Orientation.values();
                 config.orientation = values[(config.orientation.ordinal() + 1) % values.length];
                 saveAndRefresh();
             });
-            leadButton = addButton("", left + 255, top + 234, 220, 22, button -> {
+            leadButton = addButton("", left + controlX, top + 234, controlWidth, 22, button -> {
                 String[] values = {"AUTO", "UP", "DOWN", "NORTH", "SOUTH", "EAST", "WEST"};
                 int current = 0;
                 for (int i = 0; i < values.length; i++) if (values[i].equals(config.leadDirection)) current = i;
@@ -126,7 +135,7 @@ public final class AdhesionEditorScreen extends Screen {
             Face face = faceAt((int) logicalEvent.x(), (int) logicalEvent.y());
             if (face != null) {
                 config.faces.put(face, !Boolean.TRUE.equals(config.faces.get(face)));
-                ConfigStore.save();
+                saveAndRefresh();
                 return true;
             }
         }
@@ -194,6 +203,7 @@ public final class AdhesionEditorScreen extends Screen {
 
     private void saveAndRefresh() {
         ConfigStore.save();
+        if (!focusEntryIds.isEmpty()) ConfigStore.applyConfigToEntries(config, focusEntryIds);
         refreshLabels();
     }
 
@@ -243,9 +253,9 @@ public final class AdhesionEditorScreen extends Screen {
         } else {
             graphics.text(font, "Orientation handling", left + 28, top + 204, 0xFFE5E8EB);
             graphics.text(font, "Lead direction", left + 28, top + 241, 0xFFE5E8EB);
-            graphics.text(font, "Manual face overrides", left + 28, top + 267, 0xFFBBC3CC);
-            graphics.text(font, "Green = adhesion enabled     Red = adhesion disabled",
-                    left + 28, top + 278, 0xFF9FA8B2);
+            graphics.text(font, "Manual face overrides", left + 330, top + 139, 0xFFBBC3CC);
+            graphics.text(font, "Green = enabled  Red = disabled",
+                    left + 330, top + 151, 0xFF9FA8B2);
         }
 
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
@@ -255,10 +265,12 @@ public final class AdhesionEditorScreen extends Screen {
 
         if (page == Page.ADVANCED) {
             drawCubeNet(graphics, logicalMouseX, logicalMouseY);
-            graphics.text(font, "F Front   B Back   L Left   R Right   U Up   D Down",
-                    left + 28, top + 402, 0xFF9FA8B2);
+            graphics.text(font, "F Front  B Back  L Left  R Right  U Up  D Down",
+                    left + 330, top + 282, 0xFF9FA8B2);
         } else {
-            graphics.text(font, "Settings save automatically for this block.",
+            graphics.text(font, focusEntryIds.isEmpty()
+                    ? "Settings save automatically for this block."
+                    : "Settings apply to every block in the focused folder / selector.",
                     left + 28, top + 230, 0xFF9FA8B2);
         }
         graphics.pose().popMatrix();
