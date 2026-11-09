@@ -626,6 +626,49 @@ public final class ConfigStore {
     public static synchronized boolean moveTreeEntry(TreeEntry sourceSnapshot, TreeEntry targetSnapshot,
                                                       boolean intoTarget, boolean afterTarget) {
         load();
+        boolean moved = moveTreeEntryInternal(sourceSnapshot, targetSnapshot, intoTarget, afterTarget);
+        if (moved) save();
+        return moved;
+    }
+
+    /**
+     * Moves a multi-selection as one undoable operation. Selected descendants are omitted
+     * when their selected ancestor is already moving, and their relative order is preserved.
+     */
+    public static synchronized boolean moveTreeEntries(List<TreeEntry> sourceSnapshots,
+                                                       TreeEntry targetSnapshot,
+                                                       boolean intoTarget, boolean afterTarget) {
+        load();
+        if (sourceSnapshots == null || sourceSnapshots.isEmpty()) return false;
+
+        Map<String, TreeEntry> unique = new LinkedHashMap<>();
+        for (TreeEntry entry : sourceSnapshots) {
+            if (entry != null) unique.putIfAbsent(entry.id(), entry);
+        }
+        if (unique.isEmpty() || targetSnapshot != null && unique.containsKey(targetSnapshot.id())) {
+            return false;
+        }
+
+        java.util.Set<String> selectedIds = new java.util.LinkedHashSet<>(unique.keySet());
+        List<TreeEntry> topLevel = new ArrayList<>();
+        for (TreeEntry entry : unique.values()) {
+            if (!hasSelectedAncestor(entry, selectedIds)) topLevel.add(entry);
+        }
+
+        // Inserting repeatedly just after a fixed anchor reverses order, so process that
+        // direction backwards. Before-anchor and folder drops remain in display order.
+        if (!intoTarget && afterTarget) Collections.reverse(topLevel);
+
+        boolean moved = false;
+        for (TreeEntry entry : topLevel) {
+            moved |= moveTreeEntryInternal(entry, targetSnapshot, intoTarget, afterTarget);
+        }
+        if (moved) save();
+        return moved;
+    }
+
+    private static boolean moveTreeEntryInternal(TreeEntry sourceSnapshot, TreeEntry targetSnapshot,
+                                                  boolean intoTarget, boolean afterTarget) {
         if (sourceSnapshot == null) return false;
 
         String destinationParent = intoTarget && targetSnapshot != null
@@ -704,7 +747,6 @@ public final class ConfigStore {
                     targetSnapshot == null ? null : targetSnapshot.id(),
                     afterTarget);
         }
-        save();
         return true;
     }
 
