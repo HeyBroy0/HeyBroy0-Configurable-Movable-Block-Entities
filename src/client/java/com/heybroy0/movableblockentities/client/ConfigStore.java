@@ -593,16 +593,10 @@ public final class ConfigStore {
     }
 
     private static boolean hasSelectedAncestor(TreeEntry entry, java.util.Set<String> selected) {
-        String parentId = entry.parentId();
-        while (parentId != null) {
-            if (selected.contains(parentId)) return true;
-            TreeEntry parent = TREE_ENTRIES.get(parentId);
-            parentId = parent == null ? null : parent.parentId();
-        }
-        return false;
+        return entry != null && isSelectedOrHasSelectedAncestor(entry.parentId(), selected);
     }
 
-    /** True when a container itself or one of its containing directories is selected. */
+    /** True when an entry itself or one of its containing directories is selected. */
     private static boolean isSelectedOrHasSelectedAncestor(String entryId,
                                                              java.util.Set<String> selected) {
         String cursor = entryId;
