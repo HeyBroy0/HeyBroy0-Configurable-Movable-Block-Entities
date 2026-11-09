@@ -30,6 +30,7 @@ public final class AdhesionEditorScreen extends Screen {
     private static final int FACE_DISABLED_HOVER = 0xFFB24E55;
 
     private final String blockId;
+    private final String entryId;
     private final Page page;
     private final BlockConfig config;
     private int left;
@@ -39,10 +40,15 @@ public final class AdhesionEditorScreen extends Screen {
     private Button leadButton;
 
     public AdhesionEditorScreen(String blockId, Page page) {
+        this(blockId, null, page);
+    }
+
+    public AdhesionEditorScreen(String blockId, String entryId, Page page) {
         super(Component.literal(page == Page.HITBOX ? "Hitbox Adhesion Settings" : "Advanced Adhesion Settings"));
         this.blockId = blockId;
+        this.entryId = entryId;
         this.page = page;
-        this.config = ConfigStore.get(blockId);
+        this.config = entryId == null ? ConfigStore.get(blockId) : ConfigStore.get(blockId, entryId);
     }
 
     @Override
@@ -101,7 +107,7 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void returnToMain() {
-        minecraft.gui.setScreen(new MainConfigScreen(blockId));
+        minecraft.gui.setScreen(new MainConfigScreen(blockId, entryId));
     }
 
     @Override

@@ -276,7 +276,7 @@ public final class ConfigStore {
 
     public static synchronized TreeEntry createFolder(String name, String parentId, List<String> selectedEntryIds) {
         load();
-        String safeParent = folderParentOrNull(parentId);
+        String safeParent = containerParentOrNull(parentId);
         String id = "node-" + UUID.randomUUID();
         String safeName = name == null || name.isBlank() ? "New folder" : name.trim();
         TreeEntry folder = new TreeEntry(id, TreeEntryType.FOLDER, safeName, "",
@@ -437,6 +437,13 @@ public final class ConfigStore {
         return parent != null && parent.type() == TreeEntryType.FOLDER ? parent.id() : null;
     }
 
+    private static String containerParentOrNull(String parentId) {
+        if (parentId == null) return null;
+        TreeEntry parent = TREE_ENTRIES.get(parentId);
+        return parent != null && (parent.type() == TreeEntryType.FOLDER
+                || parent.type() == TreeEntryType.SELECTOR) ? parent.id() : null;
+    }
+
     private static int nextOrder(String parentId) {
         return TREE_ENTRIES.values().stream()
                 .filter(entry -> Objects.equals(entry.parentId(), parentId))
@@ -456,7 +463,10 @@ public final class ConfigStore {
         load();
         if (entryId != null && !entryId.isBlank()) {
             BlockConfig removed = BLOCKS.remove(entryId);
-            if (removed == null) BLOCKS.remove(blockId);
+            if (removed == null) {
+                TreeEntry topmost = findTopmostBlockEntry(blockId);
+                if (topmost != null && topmost.id().equals(entryId)) BLOCKS.remove(blockId);
+            }
         } else {
             BLOCKS.remove(blockId);
         }

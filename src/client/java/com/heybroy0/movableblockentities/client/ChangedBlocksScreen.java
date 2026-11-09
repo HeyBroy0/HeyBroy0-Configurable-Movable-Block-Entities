@@ -40,6 +40,7 @@ public final class ChangedBlocksScreen extends Screen {
     private int rangeAnchor = -1;
     private int listWidth = 480;
     private boolean bulkMode;
+    private String bulkParentId;
     private String activeEntryId;
     private String entryDraft = "";
 
@@ -80,6 +81,7 @@ public final class ChangedBlocksScreen extends Screen {
                 button -> renameSelected());
         bulkButton = addButton(bulkMode ? "Done selecting" : "Bulk select",
                 left + 276, top + TOOLBAR_Y, 104, 20, button -> {
+                    if (!bulkMode) bulkParentId = activeFolderParent();
                     bulkMode = !bulkMode;
                     hoveredRow = -1;
                     rebuildVisibleRows();
@@ -139,21 +141,22 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private String activeFolderParent() {
-        if (bulkMode) return null;
         ConfigStore.TreeEntry selected = ConfigStore.findTreeEntry(activeEntryId);
-        return selected != null && selected.type() == ConfigStore.TreeEntryType.FOLDER
-                ? selected.id() : null;
+        if (selected == null) return null;
+        return selected.type() == ConfigStore.TreeEntryType.FOLDER
+                ? selected.id() : selected.parentId();
     }
 
     private void createFolder() {
         String name = entryDraft.trim();
         List<String> ids = new ArrayList<>(selectedItems.keySet());
-        ConfigStore.createFolder(name, activeFolderParent(), ids);
+        ConfigStore.createFolder(name, bulkMode ? bulkParentId : activeFolderParent(), ids);
         selectedItems.clear();
         activeEntryId = null;
         rangeAnchor = -1;
         entryDraft = "";
         bulkMode = false;
+        bulkParentId = null;
         treeScrollOffset = 0;
         page = 0;
         init();
@@ -172,10 +175,7 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void focusSelectedBlock() {
-        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
-        if (active != null && active.type() == ConfigStore.TreeEntryType.BLOCK) {
-            minecraft.gui.setScreen(new MainConfigScreen(active.value()));
-        }
+focus exact occurrence
     }
 
     private void renameSelected() {
@@ -272,6 +272,8 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (event.button() != 1) return;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
+            ConfigStore.touchTreeEntry(entry.id(), entry.type() == ConfigStore.TreeEntryType.BLOCK
+                    ? entry.value() : null);
             ConfigStore.toggleExpanded(entry.id());
             rangeAnchor = -1;
             refreshTree();
@@ -280,7 +282,7 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (!bulkMode && entry.type() == ConfigStore.TreeEntryType.BLOCK
                 && x >= rowEnd - 17) {
-            ConfigStore.revert(entry.value());
+            ConfigStore.revertInstance(entry.value(), entry.id());
             rangeAnchor = -1;
             refreshTree();
             return;
@@ -288,6 +290,7 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (bulkMode || event.hasShiftDown()) {
             if (event.hasShiftDown()) {
+                if (!bulkMode) bulkParentId = entry.parentId();
                 if (rangeAnchor < 0 || rangeAnchor >= visibleRows.size()) rangeAnchor = rowIndex;
                 bulkMode = true;
                 selectRange(rowIndex);
@@ -296,14 +299,26 @@ public final class ChangedBlocksScreen extends Screen {
                 toggleSelection(entry);
                 rangeAnchor = rowIndex;
             }
+            ConfigStore.touchTreeEntry(entry.id(), entry.type() == ConfigStore.TreeEntryType.BLOCK
+                    ? entry.value() : null);
+            if (entry.parentId() == null) page = 0;
+            refreshTree();
+            rangeAnchor = findVisibleRowIndex(entry.id());
             return;
         }
 
-        // A single click selects the name; double-click opens a block or expands a container.
+        // Promote the interacted occurrence only within its own directory.
+        ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(entry.id(),
+                entry.type() == ConfigStore.TreeEntryType.BLOCK ? entry.value() : null);
         activeEntryId = entry.id();
-        rangeAnchor = rowIndex;
+        if (entry.parentId() == null) page = 0;
+        refreshTree();
+        rangeAnchor = findVisibleRowIndex(entry.id());
+
+        // A single click selects the name; double-click opens a block or expands a container.
         if (entry.type() == ConfigStore.TreeEntryType.BLOCK) {
-            if (doubleClick) minecraft.gui.setScreen(new MainConfigScreen(entry.value()));
+            if (doubleClick) minecraft.gui.setScreen(new MainConfigScreen(entry.value(),
+                    touched == null ? entry.id() : touched.id()));
         } else {
             entryDraft = entry.name();
             if (entryNameBox != null) entryNameBox.setValue(entryDraft);
@@ -314,6 +329,14 @@ public final class ChangedBlocksScreen extends Screen {
             }
             refreshToolbar();
         }
+    }
+
+    private int findVisibleRowIndex(String entryId) {
+        for (int i = treeScrollOffset; i < Math.min(visibleRows.size(),
+                treeScrollOffset + maxVisibleRows()); i++) {
+            if (visibleRows.get(i).entry().id().equals(entryId)) return i;
+        }
+        return -1;
     }
 
     private void refreshTree() {

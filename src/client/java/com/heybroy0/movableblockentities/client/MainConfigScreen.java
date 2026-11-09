@@ -31,6 +31,7 @@ public final class MainConfigScreen extends Screen {
     // Session-only search memory: a fresh game launch begins with an empty search.
     private static String lastSearchValue = "";
     private static String lastSelectedBlockId;
+    private static String lastSelectedEntryId;
 
     private final Deque<String> searchUndoHistory = new ArrayDeque<>();
     private boolean applyingSearchUndo;
@@ -39,6 +40,7 @@ public final class MainConfigScreen extends Screen {
     private String lastObservedSearchValue = "";
 
     private String selectedBlockId;
+    private String selectedEntryId;
     private BlockConfig config;
     private EditBox searchBox;
     private EditBox pushCostBox;
@@ -55,10 +57,14 @@ public final class MainConfigScreen extends Screen {
     private int searchY;
 
     public MainConfigScreen() {
-        this(null);
+        this(lastSelectedBlockId == null ? "minecraft:stone" : lastSelectedBlockId, lastSelectedEntryId);
     }
 
     public MainConfigScreen(String selectedBlockId) {
+        this(selectedBlockId, null);
+    }
+
+    public MainConfigScreen(String selectedBlockId, String selectedEntryId) {
         super(Component.literal("Configurable Movable Block Entities"));
         this.selectedBlockId = selectedBlockId == null || selectedBlockId.isBlank()
                 ? (lastSelectedBlockId == null ? "minecraft:stone" : lastSelectedBlockId)
@@ -66,7 +72,20 @@ public final class MainConfigScreen extends Screen {
         if (selectedBlockId != null && !selectedBlockId.isBlank()) {
             lastSelectedBlockId = selectedBlockId;
         }
-        this.config = ConfigStore.get(this.selectedBlockId);
+
+        ConfigStore.TreeEntry selected = selectedEntryId == null || selectedEntryId.isBlank()
+                ? ConfigStore.findTopmostBlockEntry(this.selectedBlockId)
+                : ConfigStore.touchTreeEntry(selectedEntryId, this.selectedBlockId);
+        if (selected != null) {
+            this.selectedEntryId = selected.id();
+            lastSelectedEntryId = selected.id();
+        } else {
+            this.selectedEntryId = null;
+            lastSelectedEntryId = null;
+        }
+        this.config = this.selectedEntryId == null
+                ? ConfigStore.get(this.selectedBlockId)
+                : ConfigStore.get(this.selectedBlockId, this.selectedEntryId);
     }
 
     @Override
@@ -346,7 +365,17 @@ public final class MainConfigScreen extends Screen {
     private void chooseBlock(String id) {
         selectedBlockId = id;
         lastSelectedBlockId = id;
-        config = ConfigStore.get(id);
+        ConfigStore.TreeEntry topmost = ConfigStore.findTopmostBlockEntry(id);
+        if (topmost != null) {
+            ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(topmost.id(), id);
+            selectedEntryId = touched == null ? topmost.id() : touched.id();
+            lastSelectedEntryId = selectedEntryId;
+            config = ConfigStore.get(id, selectedEntryId);
+        } else {
+            selectedEntryId = null;
+            lastSelectedEntryId = null;
+            config = ConfigStore.get(id);
+        }
         // Updating the text to the selected block is not a user edit and must not reopen autocomplete.
         suppressSuggestionActivation = true;
         try {
@@ -368,7 +397,7 @@ public final class MainConfigScreen extends Screen {
     private void openAdhesionEditor() {
         AdhesionEditorScreen.Page page = config.adhesion == Adhesion.HITBOX
                 ? AdhesionEditorScreen.Page.HITBOX : AdhesionEditorScreen.Page.ADVANCED;
-        minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, page));
+        minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId, page));
     }
 
     @Override
