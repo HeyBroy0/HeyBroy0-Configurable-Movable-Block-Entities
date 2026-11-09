@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
 const fail = (message) => {
-  console.error(\`FAIL: \${message}\`);
+  console.error('FAIL: ' + message);
   process.exitCode = 1;
 };
-const pass = (message) => console.log(\`PASS: \${message}\`);
+const pass = (message) => console.log('PASS: ' + message);
 
 const htmlPath = new URL('../prototype/index.html', import.meta.url);
 const cssPath = new URL('../prototype/styles.css', import.meta.url);
@@ -21,19 +21,19 @@ try {
   ]);
   pass('Prototype HTML, CSS, and JavaScript files exist and are readable');
 } catch (error) {
-  fail(\`Could not read prototype source files: \${error.message}\`);
+  fail('Could not read prototype source files: ' + error.message);
   process.exit(1);
 }
 
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
 const uniqueIds = new Set(ids);
 const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
-if (duplicates.length) fail(\`Duplicate HTML IDs: \${[...new Set(duplicates)].join(', ')}\`);
+if (duplicates.length) fail('Duplicate HTML IDs: ' + [...new Set(duplicates)].join(', '));
 else pass('HTML element IDs are unique');
 
 const jsSelectors = [...app.matchAll(/\$\('#([^']+)'/g)].map((match) => match[1]);
 const missingIds = [...new Set(jsSelectors)].filter((id) => !uniqueIds.has(id) && !id.startsWith('suggestion-'));
-if (missingIds.length) fail(\`JavaScript references missing HTML IDs: \${missingIds.join(', ')}\`);
+if (missingIds.length) fail('JavaScript references missing HTML IDs: ' + missingIds.join(', '));
 else pass('All static JavaScript ID selectors resolve to HTML elements');
 
 const requiredHtml = [
@@ -48,8 +48,8 @@ const requiredHtml = [
   ['adhesion options', 'data-group="adhesion"']
 ];
 for (const [label, token] of requiredHtml) {
-  if (html.includes(token)) pass(\`HTML contains \${label}\`);
-  else fail(\`HTML is missing \${label}\`);
+  if (html.includes(token)) pass('HTML contains ' + label);
+  else fail('HTML is missing ' + label);
 }
 
 const requiredInteractions = [
@@ -61,13 +61,13 @@ const requiredInteractions = [
   ['browser-local persistence', 'localStorage.setItem']
 ];
 for (const [label, token] of requiredInteractions) {
-  if (app.includes(token)) pass(\`JavaScript contains \${label}\`);
-  else fail(\`JavaScript is missing \${label}\`);
+  if (app.includes(token)) pass('JavaScript contains ' + label);
+  else fail('JavaScript is missing ' + label);
 }
 
 for (const [label, source] of [['styles', css], ['application script', app]]) {
-  if (source.trim().length > 100) pass(\`Prototype \${label} is not empty\`);
-  else fail(\`Prototype \${label} is unexpectedly small or empty\`);
+  if (source.trim().length > 100) pass('Prototype ' + label + ' is not empty');
+  else fail('Prototype ' + label + ' is unexpectedly small or empty');
 }
 
 if (process.exitCode) {
