@@ -34,6 +34,9 @@ public final class AdhesionEditorScreen extends Screen {
     private final Page page;
     private final BlockConfig config;
     private final java.util.List<String> focusEntryIds;
+    private final String focusContainerId;
+    private final java.util.List<String> focusTargets;
+    private final int focusIndex;
     private int left;
     private int top;
     private Button backButton;
@@ -56,11 +59,21 @@ public final class AdhesionEditorScreen extends Screen {
 
     public AdhesionEditorScreen(String blockId, String entryId, Page page,
                                 java.util.List<String> focusEntryIds) {
+        this(blockId, entryId, page, focusEntryIds, null, java.util.List.of(), -1);
+    }
+
+    public AdhesionEditorScreen(String blockId, String entryId, Page page,
+                                java.util.List<String> focusEntryIds,
+                                String focusContainerId, java.util.List<String> focusTargets,
+                                int focusIndex) {
         super(Component.literal(page == Page.HITBOX ? "Hitbox Adhesion Settings" : "Advanced Adhesion Settings"));
         this.blockId = blockId;
         this.entryId = entryId;
         this.page = page;
         this.focusEntryIds = focusEntryIds == null ? java.util.List.of() : java.util.List.copyOf(focusEntryIds);
+        this.focusContainerId = focusContainerId;
+        this.focusTargets = focusTargets == null ? java.util.List.of() : java.util.List.copyOf(focusTargets);
+        this.focusIndex = focusIndex;
         this.config = entryId == null ? ConfigStore.get(blockId) : ConfigStore.get(blockId, entryId);
     }
 
@@ -122,7 +135,8 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void returnToMain() {
-        minecraft.gui.setScreen(new MainConfigScreen(blockId, entryId));
+        minecraft.gui.setScreen(new MainConfigScreen(blockId, entryId,
+                focusContainerId, focusTargets, focusIndex));
     }
 
     @Override
