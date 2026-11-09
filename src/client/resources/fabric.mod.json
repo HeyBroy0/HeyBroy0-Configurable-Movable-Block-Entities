@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "movable_block_entities",
-  "version": "${version}",
+  "version": "0.1.0",
   "name": "Configurable Movable Block Entities - GUI Prototype",
   "description": "A navigable configuration GUI prototype. Piston and adhesion mechanics are not implemented in this build.",
   "authors": ["HeyBroy0"],
