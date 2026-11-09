@@ -210,19 +210,28 @@ public final class ChangedBlocksScreen extends Screen {
 
     private void appendRows(List<VisibleRow> rows, ConfigStore.TreeEntry entry,
                             int depth, boolean last, List<Boolean> ancestorLastFlags) {
-        StringBuilder connector = new StringBuilder();
-        for (boolean ancestorWasLast : ancestorLastFlags) {
-            connector.append(ancestorWasLast ? "   " : "|  ");
-        }
-        if (depth > 0) connector.append(last ? "`- " : "|- ");
-        rows.add(new VisibleRow(entry, depth, connector.toString()));
+        // Compatibility wrapper for a single root; the actual walk is iterative.
+        Deque<PendingRow> pending = new ArrayDeque<>();
+        pending.push(new PendingRow(entry, depth, last, ancestorLastFlags));
+        while (!pending.isEmpty()) {
+            PendingRow current = pending.pop();
+            StringBuilder connector = new StringBuilder();
+            for (boolean ancestorWasLast : current.ancestorLastFlags()) {
+                connector.append(ancestorWasLast ? "   " : "|  ");
+            }
+            if (current.depth() > 0) connector.append(current.last() ? "`- " : "|- ");
+            rows.add(new VisibleRow(current.entry(), current.depth(), connector.toString()));
 
-        if (!entry.expanded() || entry.type() == ConfigStore.TreeEntryType.BLOCK) return;
-        List<ConfigStore.TreeEntry> children = ConfigStore.childrenOf(entry);
-        for (int i = 0; i < children.size(); i++) {
-            List<Boolean> childFlags = new ArrayList<>(ancestorLastFlags);
-            childFlags.add(last);
-            appendRows(rows, children.get(i), depth + 1, i == children.size() - 1, childFlags);
+            if (!current.entry().expanded() || current.entry().type() == ConfigStore.TreeEntryType.BLOCK) {
+                continue;
+            }
+            List<ConfigStore.TreeEntry> children = ConfigStore.childrenOf(current.entry());
+            for (int i = children.size() - 1; i >= 0; i--) {
+                List<Boolean> childFlags = new ArrayList<>(current.ancestorLastFlags());
+                childFlags.add(current.last());
+                pending.push(new PendingRow(children.get(i), current.depth() + 1,
+                        i == children.size() - 1, List.copyOf(childFlags)));
+            }
         }
     }
 
@@ -539,5 +548,7 @@ public final class ChangedBlocksScreen extends Screen {
         return true;
     }
 
+    private record PendingRow(ConfigStore.TreeEntry entry, int depth, boolean last,
+                              List<Boolean> ancestorLastFlags) {}
     private record VisibleRow(ConfigStore.TreeEntry entry, int depth, String connector) {}
 }

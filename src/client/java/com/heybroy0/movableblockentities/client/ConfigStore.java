@@ -13,10 +13,12 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -427,18 +429,14 @@ public final class ConfigStore {
 
     public static synchronized TreeEntry findTopmostBlockEntry(String blockId) {
         load();
-        for (TreeEntry root : rootEntries()) {
-            TreeEntry found = findTopmostBlockEntry(root, blockId);
-            if (found != null) return found;
-        }
-        return null;
-    }
-
-    private static TreeEntry findTopmostBlockEntry(TreeEntry entry, String blockId) {
-        if (entry.type() == TreeEntryType.BLOCK && entry.value().equals(blockId)) return entry;
-        for (TreeEntry child : childrenOf(entry)) {
-            TreeEntry found = findTopmostBlockEntry(child, blockId);
-            if (found != null) return found;
+        List<TreeEntry> roots = rootEntries();
+        Deque<TreeEntry> pending = new ArrayDeque<>();
+        for (int i = roots.size() - 1; i >= 0; i--) pending.push(roots.get(i));
+        while (!pending.isEmpty()) {
+            TreeEntry entry = pending.pop();
+            if (entry.type() == TreeEntryType.BLOCK && entry.value().equals(blockId)) return entry;
+            List<TreeEntry> children = childrenOf(entry);
+            for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
         }
         return null;
     }
@@ -501,9 +499,7 @@ public final class ConfigStore {
     public static synchronized void rebuildBehaviorCache() {
         load();
         Map<String, EffectiveBlockConfig> rebuilt = new LinkedHashMap<>();
-        for (TreeEntry root : rootEntries()) {
-            collectEffectiveConfigs(root, rebuilt);
-        }
+        collectEffectiveConfigs(rootEntries(), rebuilt);
 
         // Preserve old block-wide entries that do not yet have an occurrence in the tree.
         BLOCKS.forEach((key, config) -> {
@@ -522,22 +518,28 @@ public final class ConfigStore {
         behaviorCacheGeneration++;
     }
 
-    private static void collectEffectiveConfigs(TreeEntry entry,
+    private static void collectEffectiveConfigs(List<TreeEntry> roots,
                                                 Map<String, EffectiveBlockConfig> destination) {
-        if (entry.type() == TreeEntryType.BLOCK) {
-            BlockConfig config = BLOCKS.get(entry.id());
-            if (config == null && !destination.containsKey(entry.value())) {
-                // Legacy block-wide settings are inherited only by the first occurrence.
-                config = BLOCKS.get(entry.value());
-            }
-            destination.putIfAbsent(entry.value(),
-                    config == null ? DEFAULT_BEHAVIOR_CONFIG.withSource(entry.id())
-                            : config.snapshot(entry.id()));
-            return;
-        }
+        Deque<TreeEntry> pending = new ArrayDeque<>();
+        for (int i = roots.size() - 1; i >= 0; i--) pending.push(roots.get(i));
 
-        for (TreeEntry child : childrenOf(entry)) {
-            collectEffectiveConfigs(child, destination);
+        // Explicit stack preserves depth-first priority without recursion, even for deeply nested folders.
+        while (!pending.isEmpty()) {
+            TreeEntry entry = pending.pop();
+            if (entry.type() == TreeEntryType.BLOCK) {
+                BlockConfig config = BLOCKS.get(entry.id());
+                if (config == null && !destination.containsKey(entry.value())) {
+                    // Legacy block-wide settings are inherited only by the first occurrence.
+                    config = BLOCKS.get(entry.value());
+                }
+                destination.putIfAbsent(entry.value(),
+                        config == null ? DEFAULT_BEHAVIOR_CONFIG.withSource(entry.id())
+                                : config.snapshot(entry.id()));
+                continue;
+            }
+
+            List<TreeEntry> children = childrenOf(entry);
+            for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
         }
     }
 
