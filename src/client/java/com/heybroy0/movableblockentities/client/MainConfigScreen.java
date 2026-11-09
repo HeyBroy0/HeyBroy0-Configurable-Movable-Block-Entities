@@ -152,10 +152,9 @@ public final class MainConfigScreen extends Screen {
         changedBlocksButton = addButton("", left + 20, top + 307, 132, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
                         0, null, focusEntryIds, -1)));
-        if (!focusEntryIds.isEmpty()) {
-            applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
-                    button -> applyFocusedSettings());
-        }
+        applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
+                button -> applyFocusedSettings());
+        applyFocusedButton.visible = !focusEntryIds.isEmpty();
         doneButton = addButton("", left + PANEL_WIDTH - 112, top + 307, 92, 22,
                 button -> closeConfiguration());
 
@@ -439,9 +438,12 @@ public final class MainConfigScreen extends Screen {
         if (index < 0 || index >= suggestions.size()) return;
         BlockSuggestion suggestion = suggestions.get(index);
         if (suggestion.tag()) {
-            clearFocusScope();
-            ConfigStore.addBlockSelector(suggestion.id(), null);
-            minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
+            ConfigStore.TreeEntry selector = ConfigStore.addBlockSelector(suggestion.id(), null);
+            if (selector != null) {
+                focusEntryIds = List.of(selector.id());
+                minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
+                        0, null, focusEntryIds, -1));
+            }
             return;
         }
         chooseBlock(suggestion.id());
@@ -450,9 +452,12 @@ public final class MainConfigScreen extends Screen {
     private void chooseExactMatch() {
         String query = searchBox.getValue().trim();
         if (query.startsWith("#") && ConfigStore.isBlockTag(query.substring(1))) {
-            clearFocusScope();
-            ConfigStore.addBlockSelector(query.substring(1), null);
-            minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0));
+            ConfigStore.TreeEntry selector = ConfigStore.addBlockSelector(query.substring(1), null);
+            if (selector != null) {
+                focusEntryIds = List.of(selector.id());
+                minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
+                        0, null, focusEntryIds, -1));
+            }
             return;
         }
         Identifier id = Identifier.tryParse(query);
@@ -472,9 +477,6 @@ public final class MainConfigScreen extends Screen {
         selectedBlockId = id;
         lastSelectedBlockId = id;
 
-        // A completed search always ends the previous focus snapshot.
-        clearFocusScope();
-
         ConfigStore.TreeEntry topmost = ConfigStore.findTopmostBlockEntry(id);
         if (topmost != null) {
             ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(topmost.id(), id);
@@ -483,6 +485,9 @@ public final class MainConfigScreen extends Screen {
             selectedEntryId = "block|" + id;
         }
         lastSelectedEntryId = selectedEntryId;
+        // A completed block search makes this exact occurrence the new focus target.
+        focusEntryIds = List.of(selectedEntryId);
+        if (applyFocusedButton != null) applyFocusedButton.visible = true;
         config = ConfigStore.get(id, selectedEntryId);
 
         // Updating the text to the selected block is not a user edit and must not reopen autocomplete.
@@ -509,7 +514,8 @@ public final class MainConfigScreen extends Screen {
                 .map(ConfigStore.TreeEntry::id)
                 .collect(java.util.stream.Collectors.toSet());
         focusEntryIds = focusEntryIds.stream()
-                .filter(available::contains)
+                .filter(id -> available.contains(id)
+                        || (id.equals(selectedEntryId) && id.startsWith("block|")))
                 .distinct()
                 .toList();
     }
