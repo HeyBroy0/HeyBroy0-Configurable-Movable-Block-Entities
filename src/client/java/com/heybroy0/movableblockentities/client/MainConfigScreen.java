@@ -102,6 +102,7 @@ public final class MainConfigScreen extends Screen {
             this.selectedEntryId = "block|" + this.selectedBlockId;
         }
         lastSelectedEntryId = this.selectedEntryId;
+        normalizeFocusScope(selected);
         this.config = ConfigStore.get(this.selectedBlockId, this.selectedEntryId);
     }
 
@@ -607,6 +608,38 @@ public final class MainConfigScreen extends Screen {
         pushCostBox.setValue(Integer.toString(config.pushCost));
         refreshControlLabels();
         refreshFocusButtons();
+    }
+
+    private void normalizeFocusScope(ConfigStore.TreeEntry selected) {
+        if (focusContainerId == null) {
+            focusEntryIds = List.of();
+            focusIndex = -1;
+            return;
+        }
+
+        ConfigStore.TreeEntry container = ConfigStore.findTreeEntry(focusContainerId);
+        if (container == null || selected == null
+                || ConfigStore.blockEntriesUnder(focusContainerId).stream()
+                .noneMatch(entry -> entry.id().equals(selected.id()))) {
+            clearFocusScope();
+            return;
+        }
+
+        String requestedTarget = focusIndex >= 0 && focusIndex < focusEntryIds.size()
+                ? focusEntryIds.get(focusIndex) : null;
+        List<String> normalizedTargets = new ArrayList<>();
+        normalizedTargets.add(FOCUS_ALL_PREFIX + focusContainerId);
+        ConfigStore.childrenOf(container).stream()
+                .filter(child -> !ConfigStore.blockEntriesUnder(child.id()).isEmpty())
+                .sorted(java.util.Comparator.comparingInt((ConfigStore.TreeEntry child) ->
+                                child.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
+                        .thenComparingInt(ConfigStore.TreeEntry::order))
+                .map(ConfigStore.TreeEntry::id)
+                .forEach(normalizedTargets::add);
+        focusEntryIds = List.copyOf(normalizedTargets);
+
+        int requestedIndex = requestedTarget == null ? -1 : focusEntryIds.indexOf(requestedTarget);
+        focusIndex = requestedIndex >= 0 ? requestedIndex : focusTargetIndexFor(selected);
     }
 
     private int focusTargetIndexFor(ConfigStore.TreeEntry occurrence) {
