@@ -594,7 +594,10 @@ public final class ConfigStore {
         }
 
         TreeEntry source = TREE_ENTRIES.get(sourceSnapshot.id());
-        boolean selectorMember = sourceSnapshot.id().startsWith("tagblock|");
+        TreeEntry sourceParent = sourceSnapshot.parentId() == null
+                ? null : TREE_ENTRIES.get(sourceSnapshot.parentId());
+        boolean selectorMember = sourceSnapshot.id().startsWith("tagblock|")
+                || sourceParent != null && sourceParent.type() == TreeEntryType.SELECTOR;
         boolean copySelectorMember = selectorMember
                 && !Objects.equals(sourceSnapshot.parentId(), destinationParent);
 
