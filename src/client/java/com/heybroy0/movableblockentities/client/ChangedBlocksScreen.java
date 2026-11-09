@@ -485,7 +485,15 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private List<ConfigStore.TreeEntry> selectedEntriesForDrag() {
-        return new ArrayList<>(selectedItems.values());
+        List<ConfigStore.TreeEntry> ordered = new ArrayList<>();
+        for (VisibleRow row : visibleRows) {
+            ConfigStore.TreeEntry selected = selectedItems.get(row.entry().id());
+            if (selected != null) ordered.add(selected);
+        }
+        for (ConfigStore.TreeEntry selected : selectedItems.values()) {
+            if (ordered.stream().noneMatch(entry -> entry.id().equals(selected.id()))) ordered.add(selected);
+        }
+        return ordered;
     }
 
     private boolean hasChildren(ConfigStore.TreeEntry entry) {
@@ -869,8 +877,13 @@ public final class ChangedBlocksScreen extends Screen {
         if (x < TREE_X - 2 || x >= TREE_X + listWidth || y < TREE_Y || y >= TREE_BOTTOM) return;
 
         int index = visibleTreeRowAt(y);
-        if (index < 0 || index >= visibleRows.size() || pressedEntry == null
-                || pressedEntries.stream().anyMatch(source -> source.id().equals(visibleRows.get(index).entry().id()))) return;
+        if (index < 0 || index >= visibleRows.size() || pressedEntry == null) return;
+        if (pressedEntries.stream().anyMatch(source -> source.id().equals(visibleRows.get(index).entry().id()))) {
+            // Dropping on any member of the moving selection is an invalid target,
+            // not an instruction to move the group to the root.
+            dragTargetIndex = -2;
+            return;
+        }
 
         dragTargetIndex = index;
         VisibleRow target = visibleRows.get(index);
@@ -908,7 +921,8 @@ public final class ChangedBlocksScreen extends Screen {
             ConfigStore.TreeEntry target = dragTargetIndex >= 0
                     ? visibleRows.get(dragTargetIndex).entry() : null;
             // A selected group is moved as one undoable tree operation.
-            boolean moved = ConfigStore.moveTreeEntries(pressedEntries, target, dragIntoFolder, dragAfterTarget);
+            boolean moved = dragTargetIndex != -2
+                    && ConfigStore.moveTreeEntries(pressedEntries, target, dragIntoFolder, dragAfterTarget);
             pressedEntry = null;
             pressedEntries = List.of();
             pendingDeselect = false;
