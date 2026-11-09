@@ -559,6 +559,14 @@ public final class ConfigStore {
                 TreeEntry topmost = findTopmostBlockEntry(blockId);
                 if (topmost != null && topmost.id().equals(entryId)) BLOCKS.remove(blockId);
             }
+
+            // Revert removes only this occurrence. Other copies of the same block stay in
+            // their folders/selectors and retain their independent settings.
+            TreeEntry occurrence = TREE_ENTRIES.get(entryId);
+            if (occurrence != null && occurrence.type() == TreeEntryType.BLOCK
+                    && occurrence.value().equals(blockId)) {
+                TREE_ENTRIES.remove(entryId);
+            }
         } else {
             BLOCKS.remove(blockId);
         }
