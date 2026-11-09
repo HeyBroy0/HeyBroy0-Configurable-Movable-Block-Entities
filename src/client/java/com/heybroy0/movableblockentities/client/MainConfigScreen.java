@@ -4,7 +4,6 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -70,11 +69,11 @@ public final class MainConfigScreen extends Screen {
     }
 
     public MainConfigScreen(String selectedBlockId, String selectedEntryId) {
-        this(selectedBlockId, selectedEntryId, null, List.of(), -1);
+        this(selectedBlockId, selectedEntryId, List.of());
     }
 
     public MainConfigScreen(String selectedBlockId, String selectedEntryId,
-                            String focusContainerId, List<String> focusEntryIds, int focusIndex) {
+                            List<String> focusEntryIds) {
         super(Component.literal("Configurable Movable Block Entities"));
         this.focusEntryIds = focusEntryIds == null ? List.of() : List.copyOf(focusEntryIds);
         this.selectedBlockId = selectedBlockId == null || selectedBlockId.isBlank()
@@ -151,7 +150,7 @@ public final class MainConfigScreen extends Screen {
 
         changedBlocksButton = addButton("", left + 20, top + 307, 132, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
-                        0, null, focusEntryIds, -1)));
+                        0, focusEntryIds)));
         applyFocusedButton = addButton("", left + 160, top + 307, 142, 22,
                 button -> applyFocusedSettings());
         applyFocusedButton.visible = !focusEntryIds.isEmpty();
@@ -442,7 +441,7 @@ public final class MainConfigScreen extends Screen {
             if (selector != null) {
                 focusEntryIds = List.of(selector.id());
                 minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, selectedEntryId,
-                        0, null, focusEntryIds, -1));
+                        0, focusEntryIds));
             }
             return;
         }
@@ -520,20 +519,14 @@ public final class MainConfigScreen extends Screen {
                 .toList();
     }
 
-    private void clearFocusScope() {
-        focusEntryIds = List.of();
-        if (applyFocusedButton != null) applyFocusedButton.visible = false;
-    }
-
     private void openAdhesionEditor() {
         AdhesionEditorScreen.Page page = config.adhesion == Adhesion.HITBOX
                 ? AdhesionEditorScreen.Page.HITBOX : AdhesionEditorScreen.Page.ADVANCED;
         minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId,
-                page, focusedTargetBlockIds(), null, focusEntryIds, -1));
+                page, focusedTargetBlockIds(), focusEntryIds));
     }
 
     private void closeConfiguration() {
-        ConfigStore.rebuildBehaviorCache();
         minecraft.gui.setScreen(null);
     }
 
