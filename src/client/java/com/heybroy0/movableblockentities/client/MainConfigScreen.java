@@ -25,7 +25,7 @@ import static com.heybroy0.movableblockentities.client.ConfigStore.*;
 /** Main page: all per-block settings stay visible on this screen. */
 public final class MainConfigScreen extends Screen {
     private static final int PANEL_WIDTH = 520;
-    private static final int PANEL_HEIGHT = 360;
+    private static final int PANEL_HEIGHT = 350;
     private static final int SUGGESTION_ROW_HEIGHT = 18;
     private static final int MAX_VISIBLE_SUGGESTIONS = 7;
 
@@ -132,8 +132,8 @@ public final class MainConfigScreen extends Screen {
         }
 
         int labelX = left + 22;
-        int controlX = left + 205;
-        int controlWidth = 180;
+        int controlX = left + 180;
+        int controlWidth = 145;
         int row1 = top + 116;
         int row2 = top + 151;
         int row3 = top + 186;
@@ -150,6 +150,7 @@ public final class MainConfigScreen extends Screen {
                 if (parsed > 0) {
                     config.pushCost = parsed;
                     ConfigStore.save();
+                    applyFocusedSettings();
                 }
             } catch (NumberFormatException ignored) {
                 // Keep the last valid saved value while the user edits the field.
@@ -157,13 +158,17 @@ public final class MainConfigScreen extends Screen {
         });
         addRenderableWidget(pushCostBox);
 
-        adhesionButton = addButton("", controlX, row4, 145, 22, button -> cycleAdhesion());
-        configureButton = addButton("Configure", controlX + 151, row4, 104, 22,
+        adhesionButton = addButton("", controlX, row4, 112, 22, button -> cycleAdhesion());
+        configureButton = addButton("Configure", controlX + 118, row4, 100, 22,
                 button -> openAdhesionEditor());
 
-        addButton("Changed blocks", left + 20, top + 307, 190, 22,
+        addButton("Changed blocks", left + 20, top + 307, 132, 22,
                 button -> minecraft.gui.setScreen(new ChangedBlocksScreen(selectedBlockId, 0)));
-        addButton("Done", left + PANEL_WIDTH - 135, top + 307, 115, 22,
+        if (!focusEntryIds.isEmpty()) {
+            addButton("Apply to focused", left + 160, top + 307, 142, 22,
+                    button -> applyFocusedSettings());
+        }
+        addButton("Done", left + PANEL_WIDTH - 112, top + 307, 92, 22,
                 button -> closeConfiguration());
 
         refreshControlLabels();
@@ -289,7 +294,14 @@ public final class MainConfigScreen extends Screen {
 
     private void persistAndRefresh() {
         ConfigStore.save();
+        applyFocusedSettings();
         refreshControlLabels();
+    }
+
+    private void applyFocusedSettings() {
+        if (!focusEntryIds.isEmpty()) {
+            ConfigStore.applyConfigToEntries(config, focusEntryIds);
+        }
     }
 
     private void refreshControlLabels() {
@@ -514,7 +526,8 @@ public final class MainConfigScreen extends Screen {
     private void openAdhesionEditor() {
         AdhesionEditorScreen.Page page = config.adhesion == Adhesion.HITBOX
                 ? AdhesionEditorScreen.Page.HITBOX : AdhesionEditorScreen.Page.ADVANCED;
-        minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId, page));
+        minecraft.gui.setScreen(new AdhesionEditorScreen(selectedBlockId, selectedEntryId,
+                page, focusEntryIds));
     }
 
     private void closeConfiguration() {
