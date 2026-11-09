@@ -331,7 +331,8 @@ public final class ConfigStore {
         for (String id : entryIds) {
             TreeEntry source = TREE_ENTRIES.get(id);
             if (source != null && hasSelectedAncestor(source, selected)) continue;
-            String copied = duplicateTreeEntry(id, source == null ? null : source.parentId());
+            String parentId = source == null ? tagBlockParentFromEntryId(id) : source.parentId();
+            String copied = duplicateTreeEntry(id, parentId);
             if (copied != null) copies.add(copied);
         }
         if (!copies.isEmpty()) save();
