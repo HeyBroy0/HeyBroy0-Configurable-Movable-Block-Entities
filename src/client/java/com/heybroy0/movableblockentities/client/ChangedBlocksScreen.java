@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -234,13 +235,26 @@ public final class ChangedBlocksScreen extends Screen {
         active = ConfigStore.focusTreeEntry(active.id());
         if (active == null) return;
         activeEntrySnapshot = active;
+
         List<ConfigStore.TreeEntry> blocks = ConfigStore.blockEntriesUnder(active.id());
         if (blocks.isEmpty()) return;
-        List<String> ids = blocks.stream().map(ConfigStore.TreeEntry::id).toList();
+
+        // Navigation targets the whole container first, then direct folders/selectors,
+        // and finally direct block occurrences. Container targets apply to all descendants.
+        List<ConfigStore.TreeEntry> childTargets = ConfigStore.childrenOf(active).stream()
+                .filter(child -> !ConfigStore.blockEntriesUnder(child.id()).isEmpty())
+                .sorted(Comparator.comparingInt((ConfigStore.TreeEntry child) ->
+                                child.type() == ConfigStore.TreeEntryType.BLOCK ? 1 : 0)
+                        .thenComparingInt(ConfigStore.TreeEntry::order))
+                .toList();
+        List<String> focusTargets = new ArrayList<>();
+        focusTargets.add(MainConfigScreen.FOCUS_ALL_PREFIX + active.id());
+        for (ConfigStore.TreeEntry child : childTargets) focusTargets.add(child.id());
+
         ConfigStore.TreeEntry first = blocks.get(0);
         ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(first.id(), first.value());
         minecraft.gui.setScreen(new MainConfigScreen(first.value(),
-                touched == null ? first.id() : touched.id(), active.id(), ids, 0));
+                touched == null ? first.id() : touched.id(), active.id(), focusTargets, 0));
     }
 
     private void deleteSelectedEntries() {
@@ -445,16 +459,21 @@ public final class ChangedBlocksScreen extends Screen {
 
     private void selectionChanged() {
         if (selectedItems.isEmpty()) {
+            // An empty selection always returns the toolbar to ordinary mode.
             bulkMode = false;
             bulkParentId = null;
             selectionScrollOffset = 0;
-            if (activeEntryId != null && ConfigStore.findTreeEntry(activeEntryId) == null) {
-                activeEntryId = null;
-                activeEntrySnapshot = null;
-            }
+            activeEntryId = null;
+            activeEntrySnapshot = null;
         } else {
             selectionScrollOffset = Math.max(0, Math.min(selectionScrollOffset,
                     Math.max(0, selectedItems.size() - maxSelectionRows())));
+            if (!selectedItems.containsKey(activeEntryId)) {
+                ConfigStore.TreeEntry remaining = selectedItems.values().stream()
+                        .reduce((first, second) -> second).orElse(null);
+                activeEntrySnapshot = remaining;
+                activeEntryId = remaining == null ? null : remaining.id();
+            }
         }
         refreshToolbar();
     }
@@ -479,8 +498,6 @@ public final class ChangedBlocksScreen extends Screen {
 
         if (event.button() != 1) return;
         if (hasChildren(entry) && x >= disclosureX && x < disclosureX + 12) {
-            activeEntryId = entry.id();
-            activeEntrySnapshot = entry;
             ConfigStore.toggleExpanded(entry.id());
             if (entry.parentId() == null) page = 0;
             rangeAnchor = -1;
