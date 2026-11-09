@@ -175,7 +175,12 @@ public final class ChangedBlocksScreen extends Screen {
     }
 
     private void focusSelectedBlock() {
-focus exact occurrence
+        ConfigStore.TreeEntry active = ConfigStore.findTreeEntry(activeEntryId);
+        if (active != null && active.type() == ConfigStore.TreeEntryType.BLOCK) {
+            ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(active.id(), active.value());
+            minecraft.gui.setScreen(new MainConfigScreen(active.value(),
+                    touched == null ? active.id() : touched.id()));
+        }
     }
 
     private void renameSelected() {
