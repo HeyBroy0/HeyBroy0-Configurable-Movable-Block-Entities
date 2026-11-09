@@ -234,6 +234,23 @@ public final class ConfigStore {
         return List.copyOf(result);
     }
 
+    /**
+     * Returns every currently visible tree occurrence in breadth-first (top-down) order.
+     * This lets a focus snapshot order all root items before their children, rather than
+     * exhausting one folder's descendants before moving to the next root item.
+     */
+    public static synchronized List<TreeEntry> treeEntriesTopDown() {
+        load();
+        List<TreeEntry> result = new ArrayList<>();
+        Deque<TreeEntry> pending = new ArrayDeque<>(rootEntries());
+        while (!pending.isEmpty()) {
+            TreeEntry entry = pending.removeFirst();
+            result.add(entry);
+            for (TreeEntry child : childrenOf(entry)) pending.addLast(child);
+        }
+        return List.copyOf(result);
+    }
+
     public static synchronized List<TreeEntry> childrenOf(TreeEntry parent) {
         load();
         if (parent == null || parent.type() == TreeEntryType.BLOCK) return List.of();
