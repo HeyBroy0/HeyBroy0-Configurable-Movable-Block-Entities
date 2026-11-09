@@ -1,7 +1,7 @@
 package com.heybroy0.movableblockentities.client;
 
+import com.mojang.blaze3d.Blaze3D;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.Util;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
@@ -391,7 +391,7 @@ public final class ConfigStore {
         try {
             Files.createDirectories(CONFIG_DIRECTORY);
             Files.createDirectories(CACHE_DIRECTORY);
-            Util.getPlatform().openFile(CONFIG_DIRECTORY.toFile());
+            Blaze3D.openPath(CONFIG_DIRECTORY);
         } catch (Exception exception) {
             System.err.println("[Movable Block Entities] Could not open config directory: " + exception.getMessage());
         }
