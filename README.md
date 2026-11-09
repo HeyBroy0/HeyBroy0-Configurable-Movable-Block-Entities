@@ -1,49 +1,96 @@
-# Configurable Movable Block Entities — Selectors & Tree GUI prototype
+# Configurable Movable Block Entities — GUI Configuration Prototype
 
-A client-side Fabric GUI/configuration prototype for Minecraft 26.3. This branch extends the original GUI prototype with block-tag selectors, an expandable folder/selector tree, bulk organization, and independent settings for repeated block entries.
+A client-side Fabric configuration prototype for Minecraft 26.3. The GUI provides block settings, searchable block-tag selectors, a hierarchical folder/selector tree, grouped selection and drag-and-drop organization, per-occurrence settings for duplicate blocks, and focus scopes for applying settings to selected groups.
+
+> **Prototype scope:** This branch stores and organizes configuration data. It does not yet implement piston movement or apply the saved movement/adhesion options to in-world block behavior.
 
 ## In-game use
 
 1. Use Minecraft 26.3 with Fabric Loader **0.20.1+**, Fabric API **0.165.2+26.3**, and Java **25**.
-2. Build with `./gradlew build` or install the JAR produced by the branch's GitHub Actions workflow.
-3. Launch Minecraft and press **O** to open the configuration screen. The key can be changed under **Options → Controls → Key Binds → Movable Block Entities**.
+2. Build with `./gradlew build`, or install the JAR produced by the GitHub Actions build workflow.
+3. Launch Minecraft and press **O** to open the configuration screen. Rebind the key under **Options → Controls → Key Binds → Movable Block Entities**.
 
 ## Main configuration screen
 
-- Configure the movement mode, scheduled-tick mode, push-cost denominator, and adhesion mode.
-- Search blocks by display name or registry ID. Ordinary text searches all registered blocks regardless of namespace; prefix matches are ranked first.
-- Enter a block-tag selector by starting the query with **#**. For example, `#minecraft:stairs`, `#c:dyed`, or `#minecraft:washed_away_by_fluids`. Tag suggestions are shown only when `#` is the first character.
-- The suggestion list is limited to seven visible rows and can be navigated with the keyboard or mouse and scrolled independently. Tab / Shift+Tab move through suggestions; Enter selects the highlighted suggestion.
-- Selecting a block opens its configuration. Search selects the highest-priority (topmost) occurrence of that block in the ordered tree when one exists.
+- Configure **Movement**, **Scheduled ticks**, **Push cost (1 / n)**, and **Adhesion** for the selected block occurrence.
+- Search blocks by registry ID or display name. Text searches all registered blocks; prefix matches are ranked first.
+- Enter a block-tag selector by starting the query with **#**. Examples include `#minecraft:stairs`, `#c:dyed`, and `#minecraft:washed_away_by_fluids`. Tag suggestions appear when `#` is the first character.
+- Suggestions show up to seven rows at once. Use **Tab / Shift+Tab** or the **Up / Down** arrows to move through them, **Enter** to choose, the mouse to select, and the mouse wheel to scroll. **Ctrl+Z** undoes the search text.
+- Choosing a block selects its highest-priority (topmost) occurrence when one exists and makes that occurrence the current focus target. Choosing a tag creates or reuses a selector and opens it in Changed Blocks as the focus target.
+- The line below the search box displays the current focus scope, for example `Focus (2): stairs, slabs`. Search completion replaces the previous focus with the newly chosen block or selector.
+- When a focus scope is active, changes to the current configuration are propagated to all block occurrences covered by that scope. **Apply to focused** explicitly applies the current values across the focus scope.
 
 ## Adhesion editors
 
-- **Hitbox** editor provides the face-grid geometry settings and manual face overrides.
-- **Advanced** editor provides geometry source, minimum occupied-square size, depth, orientation, lead direction, and a clickable six-face cube net.
-- Face states are shown with enabled/disabled color coding. Changes are saved as they are made.
-- Back and Done return to the main screen.
+The **Hitbox** and **Advanced** pages open from the Adhesion row when the selected adhesion mode supports an editor.
 
-## Changed Blocks: folders, selectors, and tree organization
+- **Hitbox** provides the face-selection grid and face-specific overrides.
+- **Advanced** provides geometry source, minimum occupied-square size, depth, orientation, lead direction, and the six-face cube net.
+- Face states use enabled/disabled colors. Changes are saved as they are made.
+- **Back**, **Done**, or Escape returns to the main configuration screen with the current focus scope preserved.
 
-- The Changed Blocks screen presents saved entries as a compact, selectable, hover-highlighted tree. Folder and selector children expand inline, with connector lines indicating nesting.
-- Root entries remain paged. Expanded descendants stay with their parent page and the tree can scroll vertically, so large folders or selectors do not force every child onto another page.
-- The icon toolbar provides **New folder**, **Rename folder**, **Focus**, **Bulk select**, **Delete / revert**, **Undo**, **Redo**, and **Copy**. Hover an icon for its button name.
-- Folders are shown in yellow-orange and are the only tree entries that can be renamed. Selectors retain their tag identity and cannot be renamed.
-- Folders can contain blocks, selectors, and other folders. Type in the search field to filter the tree; matching descendants retain their folder/selector ancestry. Filtering is a view only and never changes configuration order.
-- Bulk mode displays checkboxes and a persistent, scrollable selection sidebar. Shift-click selects a range. The red X deletes selected folders/selectors with their descendants, or reverts selected block occurrences.
-- Rows can be reordered by dragging. Drop onto a folder to move an entry into it; drop in blank space to move it to the root. Dragging a selector member outside its selector creates an independent copy rather than removing it from the live selector.
-- Click a row to focus it. Double-clicking a block opens its settings; double-clicking a folder or selector expands/collapses it without changing its order. The disclosure control toggles expansion directly.
-- Focusing a folder or selector opens the main screen at its first contained block. Previous / next controls iterate through the contained block entries in hierarchy order.
-- Copy duplicates the selected folder or selector, including its saved child structure and independent block settings. Undo and redo retain the latest 24 in-session edits.
-- Hover a tree item to inspect its configuration summary. Reverting or deleting a block occurrence removes only that occurrence's saved settings; other copies remain independent.
+## Changed Blocks tree
 
-## Duplicate blocks and priority
+The Changed Blocks screen organizes saved block occurrences, folders, and reusable tag selectors in a hierarchical tree.
 
-The tree is occurrence-based: the same registry block may appear more than once, including in different folders or under selectors. Each explicit occurrence has its own identity and saved configuration. Interacting with an entry promotes it within its own parent directory rather than moving it to the top of the entire tree. The first/topmost occurrence takes precedence when resolving a block through search. This allows a player to keep multiple independent configurations for the same block.
+### Browsing and filtering
 
-## Configuration storage
+- Root entries are paged, with 12 root entries per page. Expanding a folder or selector displays its children inline on the same page; the tree scrolls vertically when needed.
+- Use the search field to filter blocks, folders, and selectors. Matching descendants retain their ancestry in the filtered view. Filtering changes only what is displayed; it does not reorganize the saved tree.
+- Folder names and selector names have distinct colors. Hover a row to inspect its configuration summary.
+- The disclosure marker expands or collapses a folder or selector. Double-clicking a folder or selector also toggles expansion; double-clicking a block opens its configuration screen.
 
-Settings are stored in `config/movable-block-entities/settings.properties`, in a mod-specific directory directly under Minecraft's usual `config` folder. The **Config** button opens this directory. A reserved `cache/` subdirectory is also created there when opening the directory; this project currently has no separate disk cache to migrate. The current tree-aware format stores entry type, parent, order, expansion state, and per-entry block settings, in addition to the general GUI options. The store writes through a temporary file and uses atomic replacement where supported. Back up the config before testing development builds that change its format.
+### Selection model
+
+- An ordinary click selects one row. Clicking a selected row again removes it from the selection.
+- When a group is retained after leaving Bulk Select, clicking another unselected row makes that row the active ordinary selection while preserving the rest of the group. The next unselected click replaces the previous ordinary single-row addition.
+- **Shift-click** outside Bulk Select enters Bulk Select and adds the visible range from the previously active row to the clicked row.
+- **Ctrl-click** outside Bulk Select enters Bulk Select and adds only the clicked row; it does not select a range.
+- In Bulk Select, row checkboxes are shown. Shift-click adds or removes the range according to the clicked row's current selection state. Clicking an already selected row removes it.
+- The selection sidebar lists selected entries. Click a sidebar entry to remove only that entry, or use **Deselect all** to clear the group while remaining in Bulk Select.
+- Exiting Bulk Select preserves the selected group. The ordinary selection model remains available without displaying checkboxes.
+
+### Organizing entries
+
+The toolbar contains **New folder**, **Rename folder**, **Focus**, **Bulk Select**, **Delete / revert**, **Undo**, **Redo**, and **Copy**.
+
+- **New folder with no selection:** creates a folder inside the active folder, or beside the active row when it is not a folder. With no active folder or row, it creates a root folder.
+- **New folder with a selection:** always creates the new folder at the root and moves the selected entries into it. If both a directory and one of its descendants are selected, only the directory is moved; its descendants remain inside it.
+- **Rename folder** is available for user-created folders. Selectors keep their tag identity and cannot be renamed.
+- Drag selected rows to reorder them, move them above or below another row, or drop them onto a folder to nest them. Dropping in empty tree space moves the group to the root. Selected descendants are carried by a selected ancestor rather than detached from it.
+- Moving an entry does not clear its selection. Dragging a selector-generated block member outside its selector creates an independent block occurrence; the live selector membership remains intact.
+- **Copy** duplicates the selected entries in place, preserving folder structure and per-occurrence settings. Generated tag members remain supplied by the selector rather than being copied as explicit children.
+- **Delete / revert** removes selected folders or selectors with their descendants, or reverts selected block occurrences. Reverting one occurrence does not remove other copies of the same block.
+- **Undo** and **Redo** cover the latest 24 edits made during the current session.
+
+## Focus scopes
+
+Focus is a snapshot of the explicitly selected tree entries, not a keyboard cursor or a sequence of previous/next targets.
+
+- Press **Focus** to capture the current selection. The snapshot is ordered top-down by tree level: root entries precede children, and children precede deeper descendants.
+- A selected block targets that occurrence. A selected folder or selector remains a single focus target, while settings applied to that target cover its contained block occurrences.
+- The main screen displays the selected focus targets in its focus summary. There are no previous/next focus arrow controls.
+- While browsing Changed Blocks from a focus scope, returning to a block inside the original scope preserves that scope. Choosing an unrelated block starts a new focus target.
+
+## Duplicate blocks and ordering
+
+The tree is occurrence-based. The same registry block can appear multiple times, including in different folders or under selectors, and each explicit occurrence has its own identity and saved settings.
+
+When a block is searched from the main screen, the first/topmost occurrence in the ordered tree is selected. Interacting with an occurrence promotes it within its own parent directory; it does not move the entry to the root or reorder unrelated directories. Selector-generated members are resolved from the live block tag and can be copied into folders as independent occurrences.
+
+## Configuration storage and recovery
+
+Settings are stored in:
+
+`config/movable-block-entities/settings.properties`
+
+The directory is created under Minecraft's usual `config` folder. The **Config** button on Changed Blocks opens it. A reserved `cache/` subdirectory is created when opening the config directory; the current prototype does not use a separate disk cache.
+
+The tree-aware format stores entry type, parent, order, expansion state, and per-occurrence block settings. Writes use a temporary file and atomic replacement where supported.
+
+On load, the store checks the saved hierarchy for entries that cannot be reached from the root. Entries with missing parents, invalid block parents, or parent-reference cycles are reconnected to the root, keeping their descendants intact. The repaired tree is saved automatically. This recovery does not require deleting the configuration file.
+
+Back up `settings.properties` before testing development builds that change persistence behavior.
 
 ## Build
 
@@ -53,8 +100,8 @@ Minecraft 26.3's current Fabric toolchain requires Java 25:
 ./gradlew clean build
 ```
 
-The GitHub Actions workflow builds the project and uploads the JAR as an artifact.
+The GitHub Actions workflow builds the project and uploads the mod JAR as an artifact.
 
 ## Scope and limitations
 
-This branch is still a **GUI/configuration prototype**. It does not implement piston movement, a movement resolver, block-entity transfer, multiblock movement, scheduled-tick preservation, or runtime adhesion behavior. The GUI can save and organize settings, but those settings do not yet change in-world block behavior. A successful CI build verifies compilation and artifact packaging, not in-game interaction or gameplay behavior.
+This branch is a **GUI/configuration prototype**. It does not implement piston movement, a movement resolver, block-entity transfer, multiblock movement, scheduled-tick preservation, or runtime adhesion behavior. The GUI stores and organizes these options, but they do not yet change in-world block behavior. A successful CI build verifies compilation and artifact packaging, not in-game interaction or gameplay behavior.
