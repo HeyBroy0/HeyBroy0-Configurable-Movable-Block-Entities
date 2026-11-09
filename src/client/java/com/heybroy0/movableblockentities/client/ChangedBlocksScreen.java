@@ -399,14 +399,13 @@ public final class ChangedBlocksScreen extends Screen {
     private void commitRename() {
         if (renameBox == null || renamingEntryId == null) return;
         String name = renameBox.getValue().trim();
-        if (!name.isBlank()) {
-            ConfigStore.renameTreeEntry(renamingEntryId, name);
-            ConfigStore.TreeEntry renamed = ConfigStore.findTreeEntry(renamingEntryId);
-            if (renamed != null && selectedItems.containsKey(renamingEntryId)) {
-                selectedItems.put(renamingEntryId, renamed);
-            }
-            activeEntrySnapshot = renamed;
+        if (name.isBlank()) return;
+        ConfigStore.renameTreeEntry(renamingEntryId, name);
+        ConfigStore.TreeEntry renamed = ConfigStore.findTreeEntry(renamingEntryId);
+        if (renamed != null && selectedItems.containsKey(renamingEntryId)) {
+            selectedItems.put(renamingEntryId, renamed);
         }
+        activeEntrySnapshot = renamed;
         renamingEntryId = null;
         renameBox = null;
         init();
