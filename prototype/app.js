@@ -441,8 +441,8 @@ function renderAdvancedEditor() {
 }
 
 function applyCost(rawValue) {
-  const parsed = Number.parseInt(rawValue, 10);
-  const valid = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+  const parsed = Number(rawValue);
+  const valid = Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
   $('#pushCost').value = String(valid);
   setConfigValue('pushCost', valid);
 }
