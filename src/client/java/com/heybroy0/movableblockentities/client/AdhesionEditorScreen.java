@@ -33,10 +33,8 @@ public final class AdhesionEditorScreen extends Screen {
     private final String entryId;
     private final Page page;
     private final BlockConfig config;
-    private final java.util.List<String> focusEntryIds;
-    private final String focusContainerId;
-    private final java.util.List<String> focusTargets;
-    private final int focusIndex;
+    private final java.util.List<String> focusedBlockEntryIds;
+    private final java.util.List<String> focusScopeEntryIds;
     private int left;
     private int top;
     private Button backButton;
@@ -58,22 +56,21 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     public AdhesionEditorScreen(String blockId, String entryId, Page page,
-                                java.util.List<String> focusEntryIds) {
-        this(blockId, entryId, page, focusEntryIds, null, java.util.List.of(), -1);
+                                java.util.List<String> focusedBlockEntryIds) {
+        this(blockId, entryId, page, focusedBlockEntryIds, java.util.List.of());
     }
 
     public AdhesionEditorScreen(String blockId, String entryId, Page page,
-                                java.util.List<String> focusEntryIds,
-                                String focusContainerId, java.util.List<String> focusTargets,
-                                int focusIndex) {
+                                java.util.List<String> focusedBlockEntryIds,
+                                java.util.List<String> focusScopeEntryIds) {
         super(Component.literal(page == Page.HITBOX ? "Hitbox Adhesion Settings" : "Advanced Adhesion Settings"));
         this.blockId = blockId;
         this.entryId = entryId;
         this.page = page;
-        this.focusEntryIds = focusEntryIds == null ? java.util.List.of() : java.util.List.copyOf(focusEntryIds);
-        this.focusContainerId = focusContainerId;
-        this.focusTargets = focusTargets == null ? java.util.List.of() : java.util.List.copyOf(focusTargets);
-        this.focusIndex = focusIndex;
+        this.focusedBlockEntryIds = focusedBlockEntryIds == null
+                ? java.util.List.of() : java.util.List.copyOf(focusedBlockEntryIds);
+        this.focusScopeEntryIds = focusScopeEntryIds == null
+                ? java.util.List.of() : java.util.List.copyOf(focusScopeEntryIds);
         this.config = entryId == null ? ConfigStore.get(blockId) : ConfigStore.get(blockId, entryId);
     }
 
@@ -135,8 +132,7 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void returnToMain() {
-        minecraft.gui.setScreen(new MainConfigScreen(blockId, entryId,
-                focusContainerId, focusTargets, focusIndex));
+        minecraft.gui.setScreen(new MainConfigScreen(blockId, entryId, focusScopeEntryIds));
     }
 
     @Override
@@ -222,7 +218,9 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void saveAndRefresh() {
-        if (!focusEntryIds.isEmpty()) ConfigStore.applyConfigToEntries(config, focusEntryIds);
+        if (!focusedBlockEntryIds.isEmpty()) {
+            ConfigStore.applyConfigToEntries(config, focusedBlockEntryIds);
+        }
         else ConfigStore.save();
         refreshLabels();
     }
@@ -290,7 +288,7 @@ public final class AdhesionEditorScreen extends Screen {
             ResponsiveUi.text(graphics, font, "F Front  B Back  L Left  R Right  U Up  D Down",
                     left + 330, top + 282, 0xFF9FA8B2);
         } else {
-            ResponsiveUi.text(graphics, font, focusEntryIds.isEmpty()
+            ResponsiveUi.text(graphics, font, focusedBlockEntryIds.isEmpty()
                     ? "Settings save automatically for this block."
                     : "Settings apply to every block in the focused folder / selector.",
                     left + 28, top + 230, 0xFF9FA8B2);
