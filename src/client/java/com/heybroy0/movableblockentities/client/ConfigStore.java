@@ -34,10 +34,6 @@ import java.util.UUID;
 public final class ConfigStore {
     private static final Map<String, BlockConfig> BLOCKS = new TreeMap<>();
     private static final Map<String, TreeEntry> TREE_ENTRIES = new LinkedHashMap<>();
-    private static volatile Map<String, EffectiveBlockConfig> BEHAVIOR_CACHE = Map.of();
-    private static volatile long behaviorCacheGeneration;
-    private static final EffectiveBlockConfig DEFAULT_BEHAVIOR_CONFIG =
-            new BlockConfig().snapshot(null);
     private static final Path CONFIG_DIRECTORY = FabricLoader.getInstance().getConfigDir()
             .resolve("movable-block-entities");
     private static final Path CACHE_DIRECTORY = CONFIG_DIRECTORY.resolve("cache");
@@ -238,12 +234,6 @@ public final class ConfigStore {
             config.blockId = blockId;
         }
         return config;
-    }
-
-    /** Returns the topmost occurrence's settings, falling back to the legacy block-wide record. */
-    public static synchronized BlockConfig getEffective(String blockId) {
-        TreeEntry topmost = findTopmostBlockEntry(blockId);
-        return topmost == null ? get(blockId) : get(blockId, topmost.id());
     }
 
     public static synchronized List<String> changedBlockIds() {
@@ -501,10 +491,6 @@ public final class ConfigStore {
         if (source != null) BLOCKS.put(targetId, source.copyFor(blockId));
     }
 
-    public static Path configDirectory() {
-        return CONFIG_DIRECTORY;
-    }
-
     public static synchronized void openConfigDirectory() {
         try {
             Files.createDirectories(CONFIG_DIRECTORY);
@@ -705,17 +691,6 @@ public final class ConfigStore {
         save();
     }
 
-    public static synchronized TreeEntry focusTreeEntry(String entryId) {
-        load();
-        TreeEntry entry = TREE_ENTRIES.get(entryId);
-        if (entry == null) return null;
-        if (entry.type() == TreeEntryType.BLOCK) return touchTreeEntry(entryId, entry.value());
-        TreeEntry focused = moveToTop(entry);
-        TREE_ENTRIES.put(focused.id(), focused);
-        save();
-        return focused;
-    }
-
     public static synchronized TreeEntry touchTreeEntry(String entryId, String blockId) {
         load();
         TreeEntry entry = TREE_ENTRIES.get(entryId);
@@ -744,20 +719,6 @@ public final class ConfigStore {
         return top;
     }
 
-
-    /**
-     * Applies a deliberate drag-and-drop operation. Dropping on a folder nests the entry;
-     * dropping above or below a row reorders siblings; dropping in empty tree space moves
-     * the entry to the root. Tag-derived selector members are copied so their live selector
-     * membership remains intact.
-     */
-    public static synchronized boolean moveTreeEntry(TreeEntry sourceSnapshot, TreeEntry targetSnapshot,
-                                                      boolean intoTarget, boolean afterTarget) {
-        load();
-        boolean moved = moveTreeEntryInternal(sourceSnapshot, targetSnapshot, intoTarget, afterTarget);
-        if (moved) save();
-        return moved;
-    }
 
     /**
      * Moves a multi-selection as one undoable operation. Selected descendants are omitted
@@ -996,67 +957,6 @@ public final class ConfigStore {
         return "tagblock|" + selectorId + "|" + blockId;
     }
 
-    /**
-     * Rebuilds the immutable, runtime-facing block behavior snapshot from the current ordered tree.
-     * This is intentionally an explicit operation: runtime checks only perform a map lookup and
-     * never traverse the user-editable hierarchy.
-     */
-    public static synchronized void rebuildBehaviorCache() {
-        load();
-        Map<String, EffectiveBlockConfig> rebuilt = new LinkedHashMap<>();
-        collectEffectiveConfigs(rootEntries(), rebuilt);
-
-        // Preserve old block-wide entries that do not yet have an occurrence in the tree.
-        BLOCKS.forEach((key, config) -> {
-            String blockId = config.blockId;
-            if ((blockId == null || blockId.isBlank())
-                    && !key.startsWith("block|") && !key.startsWith("tagblock|")
-                    && !key.startsWith("node-")) {
-                blockId = key;
-            }
-            if (blockId != null && !blockId.isBlank()) {
-                rebuilt.putIfAbsent(blockId, config.snapshot(key));
-            }
-        });
-
-        BEHAVIOR_CACHE = Collections.unmodifiableMap(rebuilt);
-        behaviorCacheGeneration++;
-    }
-
-    private static void collectEffectiveConfigs(List<TreeEntry> roots,
-                                                Map<String, EffectiveBlockConfig> destination) {
-        Deque<TreeEntry> pending = new ArrayDeque<>();
-        for (int i = roots.size() - 1; i >= 0; i--) pending.push(roots.get(i));
-
-        // Explicit stack preserves depth-first priority without recursion, even for deeply nested folders.
-        while (!pending.isEmpty()) {
-            TreeEntry entry = pending.pop();
-            if (entry.type() == TreeEntryType.BLOCK) {
-                BlockConfig config = BLOCKS.get(entry.id());
-                if (config == null && !destination.containsKey(entry.value())) {
-                    // Legacy block-wide settings are inherited only by the first occurrence.
-                    config = BLOCKS.get(entry.value());
-                }
-                destination.putIfAbsent(entry.value(),
-                        config == null ? DEFAULT_BEHAVIOR_CONFIG.withSource(entry.id())
-                                : config.snapshot(entry.id()));
-                continue;
-            }
-
-            List<TreeEntry> children = childrenOf(entry);
-            for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
-        }
-    }
-
-    /** O(1) runtime lookup. The returned value is immutable and safe to read on tick threads. */
-    public static EffectiveBlockConfig getRuntimeConfig(String blockId) {
-        return BEHAVIOR_CACHE.getOrDefault(blockId, DEFAULT_BEHAVIOR_CONFIG);
-    }
-
-    public static long getBehaviorCacheGeneration() {
-        return behaviorCacheGeneration;
-    }
-
     /** Reverts one occurrence without deleting any other copy of the same block. */
     public static synchronized void revertInstance(String blockId, String entryId) {
         load();
@@ -1078,11 +978,6 @@ public final class ConfigStore {
             BLOCKS.remove(blockId);
         }
         save();
-    }
-
-    /** Legacy block-wide reset; retained for callers predating instance-scoped settings. */
-    public static synchronized void revert(String blockId) {
-        revertInstance(blockId, blockId);
     }
 
     public static synchronized boolean canUndo() {
@@ -1264,29 +1159,6 @@ public final class ConfigStore {
         }
     }
 
-    public record EffectiveBlockConfig(
-            Movement movement,
-            ScheduledTicks scheduledTicks,
-            int pushCost,
-            Adhesion adhesion,
-            GeometrySource geometrySource,
-            int minimumSquare,
-            int depth,
-            Orientation orientation,
-            String leadDirection,
-            Map<Face, Boolean> faces,
-            String sourceEntryId
-    ) {
-        public EffectiveBlockConfig {
-            faces = Map.copyOf(faces);
-        }
-
-        public EffectiveBlockConfig withSource(String source) {
-            return new EffectiveBlockConfig(movement, scheduledTicks, pushCost, adhesion,
-                    geometrySource, minimumSquare, depth, orientation, leadDirection, faces, source);
-        }
-    }
-
     public enum Movement { VANILLA, MOVABLE, BREAKABLE, IMMOVABLE }
     public enum ScheduledTicks { VANILLA, TRANSFER, DUPLICATE }
     public enum Adhesion { VANILLA, ADHESIVE, GLAZED, HITBOX, ADVANCED }
@@ -1309,12 +1181,6 @@ public final class ConfigStore {
 
         public BlockConfig() {
             for (Face face : Face.values()) faces.put(face, false);
-        }
-
-        public EffectiveBlockConfig snapshot(String sourceEntryId) {
-            return new EffectiveBlockConfig(movement, scheduledTicks, pushCost, adhesion,
-                    geometrySource, minimumSquare, depth, orientation, leadDirection,
-                    faces, sourceEntryId);
         }
 
         public BlockConfig copyFor(String newBlockId) {
