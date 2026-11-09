@@ -88,13 +88,13 @@ public final class ChangedBlocksScreen extends Screen {
         page = Math.max(0, Math.min(page, pageCount - 1));
         rebuildVisibleRows();
 
-        folderButton = addButton("📁", left + 18, top + TOOLBAR_Y, 64, 24,
+        folderButton = addButton("", left + 18, top + TOOLBAR_Y, 64, 24,
                 "New folder", button -> createFolder());
-        renameButton = addButton("✎", left + 86, top + TOOLBAR_Y, 36, 24,
+        renameButton = addButton("", left + 86, top + TOOLBAR_Y, 36, 24,
                 "Rename folder", button -> renameSelected());
-        focusButton = addButton("◎", left + 126, top + TOOLBAR_Y, 36, 24,
+        focusButton = addButton("", left + 126, top + TOOLBAR_Y, 36, 24,
                 "Focus selected entry", button -> focusSelectedEntry());
-        bulkButton = addButton(bulkMode ? "☑" : "☷",
+        bulkButton = addButton("",
                 left + 166, top + TOOLBAR_Y, 40, 24,
                 bulkMode ? "Finish bulk selection" : "Bulk select",
                 button -> {
@@ -104,13 +104,13 @@ public final class ChangedBlocksScreen extends Screen {
                     rebuildVisibleRows();
                     refreshToolbar();
                 });
-        deleteButton = addButton("❌", left + 210, top + TOOLBAR_Y, 30, 24,
+        deleteButton = addButton("", left + 210, top + TOOLBAR_Y, 30, 24,
                 "Delete selected entries / revert blocks", button -> deleteSelectedEntries());
-        undoButton = addButton("↶", left + 244, top + TOOLBAR_Y, 30, 24,
+        undoButton = addButton("", left + 244, top + TOOLBAR_Y, 30, 24,
                 "Undo last edit", button -> runUndo());
-        redoButton = addButton("↷", left + 278, top + TOOLBAR_Y, 30, 24,
+        redoButton = addButton("", left + 278, top + TOOLBAR_Y, 30, 24,
                 "Redo last undone edit", button -> runRedo());
-        copyButton = addButton("⧉", left + 312, top + TOOLBAR_Y, 30, 24,
+        copyButton = addButton("", left + 312, top + TOOLBAR_Y, 30, 24,
                 "Copy selected entries", button -> copySelectedEntries());
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
@@ -185,7 +185,7 @@ public final class ChangedBlocksScreen extends Screen {
         copyButton.active = bulkMode ? !selectedItems.isEmpty() : active != null;
         undoButton.active = ConfigStore.canUndo();
         redoButton.active = ConfigStore.canRedo();
-        bulkButton.setMessage(Component.literal(bulkMode ? "☑" : "☷"));
+        bulkButton.setMessage(Component.empty());
         previousButton.active = page > 0;
         nextButton.active = page < pageCount() - 1;
     }
@@ -595,7 +595,7 @@ public final class ChangedBlocksScreen extends Screen {
     private String fitText(String value, int maxWidth) {
         if (maxWidth <= 0) return "";
         String text = value;
-        while (!text.isEmpty() && font.width(text) > maxWidth) {
+        while (!text.isEmpty() && ResponsiveUi.textWidth(font, text) > maxWidth) {
             if (text.length() <= 4) return "";
             text = text.substring(0, text.length() - 4) + "...";
         }
@@ -624,7 +624,7 @@ public final class ChangedBlocksScreen extends Screen {
             }
 
             if (row.depth() > 0) {
-                graphics.text(font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
+                ResponsiveUi.text(graphics, font, row.connector(), TREE_X + 2, y + 3, 0xFF8C98A5);
             }
             int iconX = TREE_X + 2 + row.depth() * 12;
             String disclosure = hasChildren(entry) ? (entry.expanded() ? "▾" : "▸") : " ";
@@ -657,10 +657,10 @@ public final class ChangedBlocksScreen extends Screen {
                 && hoveredRow < Math.min(visibleRows.size(), treeScrollOffset + maxVisibleRows())) {
             ConfigStore.TreeEntry hovered = visibleRows.get(hoveredRow).entry();
             String tooltip = configSummary(hovered);
-            int tooltipWidth = font.width(tooltip) + 12;
+            int tooltipWidth = ResponsiveUi.textWidth(font, tooltip) + 12;
             int tooltipX = Math.min(mouseX + 10, treeRight - tooltipWidth);
             int tooltipY = Math.min(mouseY + 16, TREE_BOTTOM - 19);
-            graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 17, 0xF0101113);
+            graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 19, 0xF0101113);
             graphics.outline(tooltipX, tooltipY, tooltipWidth, 17, 0xFF69737D);
             graphics.text(font, tooltip, tooltipX + 6, tooltipY + 5, 0xFFE7ECF1);
         }
@@ -688,6 +688,27 @@ public final class ChangedBlocksScreen extends Screen {
         graphics.text(font, "Click item to remove", x + 6, TREE_BOTTOM - 13, 0xFF84909B);
     }
 
+    private void renderToolbarSymbols(GuiGraphicsExtractor graphics) {
+        drawToolbarSymbol(graphics, folderButton, "📁");
+        drawToolbarSymbol(graphics, renameButton, "✎");
+        drawToolbarSymbol(graphics, focusButton, "◎");
+        drawToolbarSymbol(graphics, bulkButton, bulkMode ? "☑" : "☷");
+        drawToolbarSymbol(graphics, deleteButton, "❌");
+        drawToolbarSymbol(graphics, undoButton, "↶");
+        drawToolbarSymbol(graphics, redoButton, "↷");
+        drawToolbarSymbol(graphics, copyButton, "⧉");
+    }
+
+    private void drawToolbarSymbol(GuiGraphicsExtractor graphics, Button button, String symbol) {
+        if (button == null || !button.visible) return;
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(button.getX() + button.getWidth() / 2.0F,
+                button.getY() + (button.getHeight() - 9) / 2.0F);
+        graphics.pose().scale(1.55F, 1.55F);
+        graphics.centeredText(font, symbol, 0, 0, button.active ? 0xFFFFFFFF : 0xFF777777);
+        graphics.pose().popMatrix();
+    }
+
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
         ResponsiveUi.push(graphics, width, height, PANEL_WIDTH, PANEL_HEIGHT);
@@ -705,7 +726,7 @@ public final class ChangedBlocksScreen extends Screen {
         int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
 
         listWidth = bulkMode ? 324 : 480;
-        graphics.centeredText(font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
+        ResponsiveUi.centeredText(graphics, font, "CHANGED BLOCKS", left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
         graphics.text(font, "Compact tree · folders and selectors stay on their page",
                 left + 18, top + 31, 0xFF9FA8B2);
         graphics.text(font, (hasSearchFilter() ? "Filtered view" : "Root page " + (page + 1) + " / " + pageCount())
@@ -719,6 +740,7 @@ public final class ChangedBlocksScreen extends Screen {
         renderTree(graphics, logicalMouseX, logicalMouseY);
         if (bulkMode) renderSelectionSidebar(graphics);
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
+        renderToolbarSymbols(graphics);
         graphics.pose().popMatrix();
     }
 
