@@ -36,7 +36,13 @@ public final class AdhesionEditorScreen extends Screen {
     private final java.util.List<String> focusEntryIds;
     private int left;
     private int top;
+    private Button backButton;
+    private Button doneButton;
     private Button geometryButton;
+    private Button minimumMinusButton;
+    private Button minimumPlusButton;
+    private Button depthMinusButton;
+    private Button depthPlusButton;
     private Button orientationButton;
     private Button leadButton;
 
@@ -64,8 +70,8 @@ public final class AdhesionEditorScreen extends Screen {
         left = 0;
         top = 0;
 
-        addButton("Back", 12, 8, 72, 22, button -> returnToMain());
-        addButton("Done", PANEL_WIDTH - 84, 8, 72, 22, button -> returnToMain());
+        backButton = addButton("", 12, 8, 72, 22, button -> returnToMain());
+        doneButton = addButton("", PANEL_WIDTH - 84, 8, 72, 22, button -> returnToMain());
 
         int controlX = 190;
         int controlWidth = page == Page.ADVANCED ? 132 : 220;
@@ -75,20 +81,20 @@ public final class AdhesionEditorScreen extends Screen {
             saveAndRefresh();
         });
 
-        addButton("−", left + controlX, top + 123, 28, 22, button -> {
+        minimumMinusButton = addButton("", left + controlX, top + 123, 28, 22, button -> {
             config.minimumSquare = Math.max(1, config.minimumSquare - 1);
             saveAndRefresh();
         });
-        addButton("+", left + controlX + controlWidth - 28, top + 123, 28, 22, button -> {
+        minimumPlusButton = addButton("", left + controlX + controlWidth - 28, top + 123, 28, 22, button -> {
             config.minimumSquare = Math.min(16, config.minimumSquare + 1);
             saveAndRefresh();
         });
 
-        addButton("−", left + controlX, top + 160, 28, 22, button -> {
+        depthMinusButton = addButton("", left + controlX, top + 160, 28, 22, button -> {
             config.depth = Math.max(1, config.depth - 1);
             saveAndRefresh();
         });
-        addButton("+", left + controlX + controlWidth - 28, top + 160, 28, 22, button -> {
+        depthPlusButton = addButton("", left + controlX + controlWidth - 28, top + 160, 28, 22, button -> {
             config.depth = Math.min(16, config.depth + 1);
             saveAndRefresh();
         });
@@ -112,7 +118,7 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private Button addButton(String label, int x, int y, int w, int h, Button.OnPress action) {
-        return addRenderableWidget(Button.builder(Component.literal(label), action).bounds(x, y, w, h).build());
+        return addRenderableWidget(Button.builder(Component.empty(), action).bounds(x, y, w, h).build());
     }
 
     private void returnToMain() {
@@ -197,7 +203,7 @@ public final class AdhesionEditorScreen extends Screen {
             graphics.fill(x, y, x + FACE_SIZE, y + FACE_SIZE, color);
             graphics.outline(x, y, FACE_SIZE, FACE_SIZE, hovered ? 0xFFFFFFFF : 0xFFCBD1D8);
             ResponsiveUi.centeredText(graphics, font, faceSymbol(face), x + FACE_SIZE / 2, y + 4, 0xFFFFFFFF);
-            graphics.centeredText(font, enabled ? "ON" : "OFF", x + FACE_SIZE / 2, y + 19, 0xFFFFFFFF);
+            ResponsiveUi.centeredText(graphics, font, enabled ? "ON" : "OFF", x + FACE_SIZE / 2, y + 19, 0xFFFFFFFF);
         }
     }
 
@@ -209,12 +215,12 @@ public final class AdhesionEditorScreen extends Screen {
 
     private void refreshLabels() {
         if (geometryButton == null) return;
-        geometryButton.setMessage(Component.literal("‹  " + pretty(config.geometrySource.name()) + "  ›"));
+        geometryButton.setMessage(Component.empty());
         if (orientationButton != null) {
-            orientationButton.setMessage(Component.literal("‹  " + pretty(config.orientation.name()) + "  ›"));
+            orientationButton.setMessage(Component.empty());
         }
         if (leadButton != null) {
-            leadButton.setMessage(Component.literal("‹  " + pretty(config.leadDirection) + "  ›"));
+            leadButton.setMessage(Component.empty());
         }
     }
 
@@ -239,26 +245,27 @@ public final class AdhesionEditorScreen extends Screen {
         int logicalMouseX = ResponsiveUi.toLogicalX(mouseX, width, height, PANEL_WIDTH, PANEL_HEIGHT);
         int logicalMouseY = ResponsiveUi.toLogicalY(mouseY, width, height, PANEL_WIDTH, PANEL_HEIGHT);
 
-        graphics.centeredText(font,
+        ResponsiveUi.centeredText(graphics, font,
                 page == Page.HITBOX ? "HITBOX ADHESION" : "ADVANCED ADHESION",
                 left + PANEL_WIDTH / 2, top + 14, 0xFFFFFFFF);
         ResponsiveUi.text(graphics, font, "Block: " + blockId, left + 22, top + 52, 0xFFBBC3CC);
-        graphics.text(font, "Geometry source", left + 28, top + 93, 0xFFE5E8EB);
-        graphics.text(font, "Minimum contact square", left + 28, top + 130, 0xFFE5E8EB);
-        graphics.text(font, "Inward depth (voxels)", left + 28, top + 167, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Geometry source", left + 28, top + 93, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Minimum contact square", left + 28, top + 130, 0xFFE5E8EB);
+        ResponsiveUi.text(graphics, font, "Inward depth (voxels)", left + 28, top + 167, 0xFFE5E8EB);
 
         if (page == Page.HITBOX) {
-            graphics.text(font, "16 × 16 face grid  •  largest fully occupied square  •  green = enabled",
+            ResponsiveUi.text(graphics, font, "16 × 16 face grid  •  largest fully occupied square  •  green = enabled",
                     left + 28, top + 204, 0xFF9FA8B2);
         } else {
-            graphics.text(font, "Orientation handling", left + 28, top + 204, 0xFFE5E8EB);
-            graphics.text(font, "Lead direction", left + 28, top + 241, 0xFFE5E8EB);
-            graphics.text(font, "Manual face overrides", left + 330, top + 139, 0xFFBBC3CC);
-            graphics.text(font, "Green = enabled  Red = disabled",
+            ResponsiveUi.text(graphics, font, "Orientation handling", left + 28, top + 204, 0xFFE5E8EB);
+            ResponsiveUi.text(graphics, font, "Lead direction", left + 28, top + 241, 0xFFE5E8EB);
+            ResponsiveUi.text(graphics, font, "Manual face overrides", left + 330, top + 139, 0xFFBBC3CC);
+            ResponsiveUi.text(graphics, font, "Green = enabled  Red = disabled",
                     left + 330, top + 151, 0xFF9FA8B2);
         }
 
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
+        renderButtonLabels(graphics);
 
         int valueX = page == Page.ADVANCED ? left + 225 : left + 296;
         drawValue(graphics, valueX, top + 129, Integer.toString(config.minimumSquare));
@@ -266,10 +273,10 @@ public final class AdhesionEditorScreen extends Screen {
 
         if (page == Page.ADVANCED) {
             drawCubeNet(graphics, logicalMouseX, logicalMouseY);
-            graphics.text(font, "F Front  B Back  L Left  R Right  U Up  D Down",
+            ResponsiveUi.text(graphics, font, "F Front  B Back  L Left  R Right  U Up  D Down",
                     left + 330, top + 282, 0xFF9FA8B2);
         } else {
-            graphics.text(font, focusEntryIds.isEmpty()
+            ResponsiveUi.text(graphics, font, focusEntryIds.isEmpty()
                     ? "Settings save automatically for this block."
                     : "Settings apply to every block in the focused folder / selector.",
                     left + 28, top + 230, 0xFF9FA8B2);
@@ -277,11 +284,35 @@ public final class AdhesionEditorScreen extends Screen {
         graphics.pose().popMatrix();
     }
 
+    private void renderButtonLabels(GuiGraphicsExtractor graphics) {
+        drawButtonLabel(graphics, backButton, "Back");
+        drawButtonLabel(graphics, doneButton, "Done");
+        drawButtonLabel(graphics, geometryButton, "‹  " + pretty(config.geometrySource.name()) + "  ›");
+        drawButtonLabel(graphics, minimumMinusButton, "−");
+        drawButtonLabel(graphics, minimumPlusButton, "+");
+        drawButtonLabel(graphics, depthMinusButton, "−");
+        drawButtonLabel(graphics, depthPlusButton, "+");
+        if (orientationButton != null) {
+            drawButtonLabel(graphics, orientationButton, "‹  " + pretty(config.orientation.name()) + "  ›");
+        }
+        if (leadButton != null) {
+            drawButtonLabel(graphics, leadButton, "‹  " + pretty(config.leadDirection) + "  ›");
+        }
+    }
+
+    private void drawButtonLabel(GuiGraphicsExtractor graphics, Button button, String label) {
+        if (button == null || !button.visible || label == null || label.isEmpty()) return;
+        ResponsiveUi.centeredText(graphics, font, label,
+                button.getX() + button.getWidth() / 2,
+                button.getY() + Math.max(2, (button.getHeight() - 8) / 2),
+                button.active ? 0xFFFFFFFF : 0xFF777777);
+    }
+
     private void drawValue(GuiGraphicsExtractor graphics, int x, int y, String value) {
         int width = page == Page.ADVANCED ? 60 : 130;
         graphics.fill(x, y, x + width, y + 22, 0xFF1F2327);
         graphics.outline(x, y, width, 22, 0xFF545D66);
-        graphics.centeredText(font, value, x + width / 2, y + 7, 0xFFFFFFFF);
+        ResponsiveUi.centeredText(graphics, font, value, x + width / 2, y + 7, 0xFFFFFFFF);
     }
 
     @Override
