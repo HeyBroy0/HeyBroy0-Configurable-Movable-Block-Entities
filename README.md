@@ -585,3 +585,8 @@ A standalone browser prototype is available in [`prototype/`](prototype/). Open 
 The prototype keeps movement, scheduled-tick, push-cost, and adhesion choices on the main screen. Selecting Hitbox or Advanced reveals the matching Configure button beside the adhesion choices. Block search includes a command-block-style suggestion panel with keyboard navigation and Tab completion.
 
 This is a GUI-only prototype. It uses a small illustrative block list and browser-local settings; it does not connect to Minecraft registries or implement piston, block-entity, scheduled-tick, multiblock, or adhesion runtime behavior.
+
+
+### GitHub Actions
+
+The GUI prototype is validated and packaged by [the GUI Prototype workflow](https://github.com/HeyBroy0/HeyBroy0-Configurable-Movable-Block-Entities/actions/workflows/gui-prototype.yml). Successful runs upload a downloadable `gui-prototype.zip` artifact. See [the prototype build instructions](prototype/README.md#github-actions-build).
