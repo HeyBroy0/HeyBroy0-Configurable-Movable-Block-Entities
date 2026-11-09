@@ -27,13 +27,15 @@ A client-side Fabric GUI/configuration prototype for Minecraft 26.3. This branch
 
 - The Changed Blocks screen presents saved entries as a compact, selectable, hover-highlighted tree. Folder and selector children expand inline, with connector lines indicating nesting.
 - Root entries remain paged. Expanded descendants stay with their parent page and the tree can scroll vertically, so large folders or selectors do not force every child onto another page.
-- **New folder**, **Add selector**, **Rename**, and **Bulk select** are available in the toolbar. Only player-created folders/selectors can be renamed.
-- Add a selector using a block tag ID (with or without the leading `#`). Expanding it reveals the blocks currently in that tag.
-- Folders can contain blocks, selectors, and other folders. Select entries and create a folder to place the selection inside it.
-- Bulk mode displays checkboxes and a persistent, scrollable selection sidebar. The selection remains while navigating root pages. Shift-click selects a range and automatically enters bulk mode.
-- Rows can be reordered by dragging. Drop onto a folder to move an entry into it; drop in blank space to move it to the root. Selector-derived block rows are treated as separate occurrences when copied into a folder.
-- Clicking a row selects it; double-clicking a block opens its settings, while double-clicking a folder or selector expands/collapses it. The disclosure control toggles expansion directly.
-- Revert removes only the selected block occurrence's saved settings; it does not erase other copies of the same block.
+- The icon toolbar provides **New folder**, **Rename folder**, **Focus**, **Bulk select**, **Delete / revert**, **Undo**, **Redo**, and **Copy**. Hover an icon for its button name.
+- Folders are shown in yellow-orange and are the only tree entries that can be renamed. Selectors retain their tag identity and cannot be renamed.
+- Folders can contain blocks, selectors, and other folders. Type in the search field to filter the tree; matching descendants retain their folder/selector ancestry. Filtering is a view only and never changes configuration order.
+- Bulk mode displays checkboxes and a persistent, scrollable selection sidebar. Shift-click selects a range. The red X deletes selected folders/selectors with their descendants, or reverts selected block occurrences.
+- Rows can be reordered by dragging. Drop onto a folder to move an entry into it; drop in blank space to move it to the root. Dragging a selector member outside its selector creates an independent copy rather than removing it from the live selector.
+- Click a row to focus it. Double-clicking a block opens its settings; double-clicking a folder or selector expands/collapses it without changing its order. The disclosure control toggles expansion directly.
+- Focusing a folder or selector opens the main screen at its first contained block. Previous / next controls iterate through the contained block entries in hierarchy order.
+- Copy duplicates the selected folder or selector, including its saved child structure and independent block settings. Undo and redo retain the latest 24 in-session edits.
+- Hover a tree item to inspect its configuration summary. Reverting or deleting a block occurrence removes only that occurrence's saved settings; other copies remain independent.
 
 ## Duplicate blocks and priority
 
@@ -41,7 +43,7 @@ The tree is occurrence-based: the same registry block may appear more than once,
 
 ## Configuration storage
 
-Settings are stored in `config/movable-block-entities/settings.properties`. The current tree-aware format stores entry type, parent, order, expansion state, and per-entry block settings, in addition to the general GUI options. The store writes through a temporary file and uses atomic replacement where supported. Back up the config before testing development builds that change its format.
+Settings are stored in `config/movable-block-entities/settings.properties`, in a mod-specific directory directly under Minecraft's usual `config` folder. The **Config** button opens this directory. A reserved `cache/` subdirectory is also created there when opening the directory; this project currently has no separate disk cache to migrate. The current tree-aware format stores entry type, parent, order, expansion state, and per-entry block settings, in addition to the general GUI options. The store writes through a temporary file and uses atomic replacement where supported. Back up the config before testing development builds that change its format.
 
 ## Build
 
