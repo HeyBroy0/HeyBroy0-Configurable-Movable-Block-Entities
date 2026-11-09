@@ -965,7 +965,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (configDirectoryButton == null || !configDirectoryButton.visible) return;
         int centerX = configDirectoryButton.getX() + configDirectoryButton.getWidth() / 2;
         int centerY = configDirectoryButton.getY() + Math.max(2, (configDirectoryButton.getHeight() - 8) / 2);
-        int iconWidth = ResponsiveUi.textWidth(font, "📂");
+        int iconWidth = Math.round(ResponsiveUi.textWidth(font, "📂") * 1.35F);
         int textWidth = ResponsiveUi.textWidth(font, "Config");
         int totalWidth = iconWidth + 2 + textWidth;
         int startX = centerX - totalWidth / 2;
