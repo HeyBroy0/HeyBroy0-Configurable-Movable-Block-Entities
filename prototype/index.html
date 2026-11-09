@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171a1d">
+  <title>Movable Block Entities — Configuration Prototype</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Movable Block Entities configuration home" data-view="main">
+        <span class="brand-mark" aria-hidden="true">▦</span>
+        <span class="brand-copy">
+          <strong>MOVABLE BLOCK ENTITIES</strong>
+          <small>CONFIGURATION PROTOTYPE</small>
+        </span>
+      </a>
+      <div class="topbar-right">
+        <span class="prototype-indicator"><i></i> GUI-ONLY BUILD</span>
+        <span class="topbar-divider"></span>
+        <span class="version-label">26.3 CONCEPT</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="page-intro">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> BLOCK RULESET / CONFIGURATION</div>
+        <div class="intro-row">
+          <div>
+            <h1>Block behaviour</h1>
+            <p>Choose how each block behaves when interacting with piston movement.</p>
+          </div>
+          <div class="view-switch" role="tablist" aria-label="Configuration views">
+            <button class="view-tab active" type="button" role="tab" aria-selected="true" data-view="main">Configuration</button>
+            <button class="view-tab" type="button" role="tab" aria-selected="false" data-view="changed">Changed blocks <span id="changedCount" class="count-pill">0</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="mainView" class="view active" aria-label="Block configuration">
+        <div class="main-grid">
+          <aside class="sidebar">
+            <section class="panel target-panel">
+              <div class="panel-label"><span>01</span> TARGET BLOCK</div>
+              <label class="field-label" for="blockSearch">Find a block</label>
+              <div class="autocomplete-wrap">
+                <div class="search-field">
+                  <span class="search-icon" aria-hidden="true">⌕</span>
+                  <input id="blockSearch" type="text" value="minecraft:stone" spellcheck="false" autocomplete="off" autocapitalize="off" aria-autocomplete="list" aria-controls="blockSuggestions" aria-expanded="false" placeholder="Search name or minecraft:…">
+                  <button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button>
+                </div>
+                <div id="blockSuggestions" class="suggestions" role="listbox" aria-label="Block suggestions" hidden></div>
+              </div>
+              <p class="field-hint">Type an ID or display name. <kbd>↑</kbd> <kbd>↓</kbd> browse · <kbd>Tab</kbd> fill · <kbd>Enter</kbd> select.</p>
+              <div class="selected-block">
+                <div id="blockGlyph" class="block-glyph" aria-hidden="true">▦</div>
+                <div class="selected-block-copy">
+                  <strong id="selectedBlockName">Stone</strong>
+                  <small id="selectedBlockId">minecraft:stone</small>
+                </div>
+                <span id="selectedBlockStatus" class="status-tag">DEFAULT</span>
+              </div>
+            </section>
+
+            <section class="panel sidebar-panel">
+              <div class="panel-label"><span>02</span> WORKSPACE</div>
+              <button class="sidebar-link" type="button" data-view="changed">
+                <span class="sidebar-link-icon">≡</span>
+                <span><strong>Changed blocks</strong><small>Review custom rules</small></span>
+                <span class="sidebar-link-arrow">›</span>
+              </button>
+              <div class="sidebar-note">
+                <span class="note-icon">i</span>
+                <p>Settings shown here are a local UI simulation. No Minecraft world or piston logic is connected.</p>
+              </div>
+            </section>
+          </aside>
+
+          <div class="content-column">
+            <div class="content-heading">
+              <div>
+                <div class="section-overline">EDITING BLOCK</div>
+                <h2 id="contentBlockName">Stone</h2>
+                <p id="contentBlockId">minecraft:stone <span class="separator-dot">·</span> Configuration applies to this block only</p>
+              </div>
+              <div class="saved-state"><span class="saved-dot"></span> LOCAL SETTINGS</div>
+            </div>
+
+            <section class="panel settings-panel">
+              <div class="section-title">
+                <div class="section-title-main"><span class="section-number">01</span><h3>Movement</h3></div>
+                <span class="section-description">How should a piston treat this block?</span>
+              </div>
+              <div class="option-grid movement-grid" role="group" aria-label="Movement behaviour">
+                <button class="option-card selected" type="button" data-group="movement" data-value="vanilla">
+                  <span class="option-symbol">◈</span><strong>Vanilla</strong><small>Preserve existing behaviour</small>
+                </button>
+                <button class="option-card" type="button" data-group="movement" data-value="movable">
+                  <span class="option-symbol">↗</span><strong>Movable</strong><small>Allow piston movement</small>
+                </button>
+                <button class="option-card" type="button" data-group="movement" data-value="breakable">
+                  <span class="option-symbol">⌁</span><strong>Breakable</strong><small>Break when pushed</small>
+                </button>
+                <button class="option-card" type="button" data-group="movement" data-value="immovable">
+                  <span class="option-symbol">⊘</span><strong>Immovable</strong><small>Prevent movement or breaking</small>
+                </button>
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="section-title">
+                <div class="section-title-main"><span class="section-number">02</span><h3>Scheduled ticks</h3></div>
+                <span class="section-description">What happens to pending block ticks?</span>
+              </div>
+              <div class="option-grid tick-grid" role="group" aria-label="Scheduled tick behaviour">
+                <button class="option-card compact selected" type="button" data-group="ticks" data-value="vanilla">
+                  <strong>Vanilla</strong><small>Keep normal tick handling</small>
+                </button>
+                <button class="option-card compact" type="button" data-group="ticks" data-value="transfer">
+                  <strong>Transfer</strong><small>Move pending ticks with block</small>
+                </button>
+                <button class="option-card compact" type="button" data-group="ticks" data-value="duplicate">
+                  <strong>Duplicate</strong><small>Keep original and copy ticks</small>
+                </button>
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="section-title">
+                <div class="section-title-main"><span class="section-number">03</span><h3>Push cost</h3></div>
+                <span class="section-description">Vanilla capacity cost for this block</span>
+              </div>
+              <div class="push-cost-row">
+                <div class="push-cost-description">
+                  <strong>Cost denominator</strong>
+                  <p>A positive integer. <span>1</span> uses the full vanilla push cost; higher values reduce the cost proportionally.</p>
+                </div>
+                <div class="stepper" aria-label="Push cost denominator">
+                  <button id="costDown" type="button" aria-label="Decrease push cost">−</button>
+                  <input id="pushCost" type="number" inputmode="numeric" min="1" step="1" value="1" aria-label="Push cost denominator">
+                  <button id="costUp" type="button" aria-label="Increase push cost">+</button>
+                </div>
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="section-title">
+                <div class="section-title-main"><span class="section-number">04</span><h3>Adhesion</h3></div>
+                <span class="section-description">Which faces can stick to neighbouring blocks?</span>
+              </div>
+              <div class="adhesion-row">
+                <div class="adhesion-options" role="group" aria-label="Adhesion mode">
+                  <button class="adhesion-option selected" type="button" data-group="adhesion" data-value="vanilla"><span class="adhesion-mark">◇</span><strong>Vanilla</strong></button>
+                  <button class="adhesion-option" type="button" data-group="adhesion" data-value="adhesive"><span class="adhesion-mark">✣</span><strong>Adhesive</strong></button>
+                  <button class="adhesion-option" type="button" data-group="adhesion" data-value="glazed"><span class="adhesion-mark">▤</span><strong>Glazed</strong></button>
+                  <button class="adhesion-option" type="button" data-group="adhesion" data-value="hitbox"><span class="adhesion-mark">▧</span><strong>Hitbox</strong></button>
+                  <button class="adhesion-option" type="button" data-group="adhesion" data-value="advanced"><span class="adhesion-mark">⌘</span><strong>Advanced</strong></button>
+                </div>
+                <button id="adhesionConfigure" class="configure-button" type="button" hidden>
+                  <span>Configure</span><span aria-hidden="true">↗</span>
+                </button>
+              </div>
+              <p class="adhesion-hint" id="adhesionHint">Uses Minecraft's existing adhesion and stickiness behaviour.</p>
+            </section>
+
+            <div class="bottom-actions">
+              <button id="revertCurrent" class="text-button" type="button">↶ Revert this block to defaults</button>
+              <span class="autosave-copy"><span class="autosave-dot"></span> Changes are saved in this browser</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="changedView" class="view" aria-label="Changed blocks" hidden>
+        <div class="subpage-heading">
+          <div><div class="section-overline">WORKSPACE / OVERRIDES</div><h2>Changed blocks</h2><p>Only blocks with settings that differ from their defaults appear here.</p></div>
+          <button class="secondary-button" type="button" data-view="main">← Back to configuration</button>
+        </div>
+        <section class="panel changed-panel">
+          <div class="changed-toolbar">
+            <div><strong id="changedSummary">0 custom configurations</strong><small>Custom block rules</small></div>
+            <span class="subtle-label">LOCAL STORAGE</span>
+          </div>
+          <div id="changedList" class="changed-list"></div>
+          <div id="emptyChanged" class="empty-state">
+            <div class="empty-mark">◇</div>
+            <strong>No changed blocks yet</strong>
+            <p>Choose a block and change one of its settings. It will appear here for quick review.</p>
+            <button class="primary-button" type="button" data-view="main">Configure a block</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="hitboxView" class="view detail-view" aria-label="Hitbox adhesion settings" hidden>
+        <div class="subpage-heading">
+          <div>
+            <button class="breadcrumb" type="button" data-view="main">← Block configuration</button>
+            <div class="section-overline">ADHESION / HITBOX</div>
+            <h2>Hitbox adhesion</h2>
+            <p>Set the geometry test used to detect adhesive contact faces.</p>
+          </div>
+          <span class="mode-badge hitbox-badge">HITBOX MODE</span>
+        </div>
+        <div class="editor-grid">
+          <section class="panel editor-panel">
+            <div class="panel-label"><span>01</span> CONTACT ANALYSIS</div>
+            <div class="form-row">
+              <div><label for="hitboxShapeSource">Geometry source</label><small>Which block shape should be measured?</small></div>
+              <select id="hitboxShapeSource"><option value="outline">Outline / selection shape</option><option value="collision">Collision shape</option><option value="visual">Visual shape</option></select>
+            </div>
+            <div class="form-row range-row">
+              <div><label for="hitboxMinSquare">Minimum contact square</label><small>Minimum fully occupied square across the face grid.</small></div>
+              <div class="range-control"><input id="hitboxMinSquare" type="range" min="1" max="16" value="3"><output id="hitboxMinSquareValue">3 × 3 px</output></div>
+            </div>
+            <div class="form-row range-row">
+              <div><label for="hitboxDepth">Inward depth threshold</label><small>Number of voxel layers measured from the face.</small></div>
+              <div class="range-control"><input id="hitboxDepth" type="range" min="1" max="8" value="2"><output id="hitboxDepthValue">2 voxels</output></div>
+            </div>
+            <div class="editor-footer"><span class="info-inline">ⓘ Thresholds are settings only in this prototype.</span><button class="primary-button" id="saveHitbox" type="button">Apply hitbox settings</button></div>
+          </section>
+          <section class="panel preview-panel">
+            <div class="panel-label"><span>02</span> FACE CONTACT PREVIEW</div>
+            <div class="preview-title"><strong>Top face · U</strong><span>16 × 16 reference grid</span></div>
+            <div id="hitboxGrid" class="hitbox-grid" aria-label="Illustrative top-face contact grid"></div>
+            <div class="preview-legend"><span><i class="legend-filled"></i> Shape contact</span><span><i class="legend-empty"></i> No contact</span></div>
+            <div class="preview-footnote">Illustrative preview only. Actual state-dependent geometry analysis is not connected.</div>
+          </section>
+        </div>
+      </section>
+
+      <section id="advancedView" class="view detail-view" aria-label="Advanced adhesion settings" hidden>
+        <div class="subpage-heading">
+          <div>
+            <button class="breadcrumb" type="button" data-view="main">← Block configuration</button>
+            <div class="section-overline">ADHESION / ADVANCED</div>
+            <h2>Advanced adhesion</h2>
+            <p>Override automatic analysis and define face behaviour for this block.</p>
+          </div>
+          <span class="mode-badge advanced-badge">ADVANCED MODE</span>
+        </div>
+        <div class="editor-grid advanced-grid">
+          <section class="panel editor-panel">
+            <div class="panel-label"><span>01</span> ANALYSIS OVERRIDES</div>
+            <div class="form-row">
+              <div><label for="advancedShapeSource">Geometry source</label><small>Shape used for automatic face detection.</small></div>
+              <select id="advancedShapeSource"><option value="outline">Outline / selection shape</option><option value="collision">Collision shape</option><option value="visual">Visual shape</option></select>
+            </div>
+            <div class="form-row range-row">
+              <div><label for="advancedMinSquare">Minimum contact square</label><small>Largest completely occupied square dimension.</small></div>
+              <div class="range-control"><input id="advancedMinSquare" type="range" min="1" max="16" value="3"><output id="advancedMinSquareValue">3 × 3 px</output></div>
+            </div>
+            <div class="form-row range-row">
+              <div><label for="advancedDepth">Inward depth threshold</label><small>Sampling depth measured inward from each face.</small></div>
+              <div class="range-control"><input id="advancedDepth" type="range" min="1" max="8" value="2"><output id="advancedDepthValue">2 voxels</output></div>
+            </div>
+            <div class="form-row">
+              <div><label for="leadDirection">Lead direction</label><small>Orientation source. Auto does not invent a direction.</small></div>
+              <select id="leadDirection"><option value="auto">Automatic / none when unavailable</option><option value="north">North</option><option value="south">South</option><option value="east">East</option><option value="west">West</option><option value="up">Up</option><option value="down">Down</option></select>
+            </div>
+            <div class="analysis-box">
+              <div class="analysis-box-heading"><strong>Detected state properties</strong><span>EXAMPLE ANALYSIS</span></div>
+              <div class="property-line"><span>Orientation-affecting</span><strong id="orientationProperties">—</strong></div>
+              <div class="property-line"><span>Geometry-affecting</span><strong id="geometryProperties">—</strong></div>
+            </div>
+          </section>
+          <section class="panel face-editor-panel">
+            <div class="panel-label"><span>02</span> MANUAL FACE OVERRIDE</div>
+            <div class="cube-editor">
+              <div class="cube-net" role="group" aria-label="Adhesive face controls">
+                <button class="face-toggle face-up" data-face="U" type="button" aria-pressed="true"><b>U</b><small>UP</small></button>
+                <button class="face-toggle face-left" data-face="L" type="button" aria-pressed="true"><b>L</b><small>LEFT</small></button>
+                <button class="face-toggle face-front" data-face="F" type="button" aria-pressed="true"><b>F</b><small>FRONT</small></button>
+                <button class="face-toggle face-right" data-face="R" type="button" aria-pressed="true"><b>R</b><small>RIGHT</small></button>
+                <button class="face-toggle face-back" data-face="B" type="button" aria-pressed="true"><b>B</b><small>BACK</small></button>
+                <button class="face-toggle face-down" data-face="D" type="button" aria-pressed="true"><b>D</b><small>DOWN</small></button>
+              </div>
+              <div class="cube-legend"><span><i class="enabled-key"></i> Adhesion enabled</span><span><i class="disabled-key"></i> Adhesion disabled</span></div>
+            </div>
+            <div class="editor-footer advanced-footer"><span class="info-inline">Click a face to toggle its override.</span><button class="primary-button" id="saveAdvanced" type="button">Apply advanced settings</button></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>CONFIGURATION LAB <span class="footer-separator">/</span> UI PROTOTYPE</span>
+      <span>NOT CONNECTED TO MINECRAFT RUNTIME</span>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="./app.js"></script>
+</body>
+</html>
