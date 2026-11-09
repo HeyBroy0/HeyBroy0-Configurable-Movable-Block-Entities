@@ -547,7 +547,7 @@ public final class ConfigStore {
                     // A selector-derived row is covered when its selector or any containing
                     // directory is selected. Otherwise keep the live selector and copy the row.
                     if (selectorId == null || !isSelectedOrHasSelectedAncestor(selectorId, selected)) {
-                        copyBlockNode(existing.value(), existing.id(), id);
+                        duplicateBlockOccurrence(existing.id(), existing.value(), id);
                     }
                     continue;
                 }
@@ -573,7 +573,7 @@ public final class ConfigStore {
                         TREE_ENTRIES.put(selectedId, movedRootBlock);
                     } else {
                         // A generated selector row is copied; the selector keeps its live member.
-                        copyBlockNode(blockId, selectedId, id);
+                        duplicateBlockOccurrence(selectedId, blockId, id);
                     }
                 }
             }
@@ -584,29 +584,6 @@ public final class ConfigStore {
 
     public static synchronized TreeEntry addBlockSelector(String tagId, String parentId) {
         return addTagSelector(tagId, null, parentId);
-    }
-
-    private static void copyBlockNode(String blockId, String sourceEntryId, String parentId) {
-        String id = "node-" + UUID.randomUUID();
-        TREE_ENTRIES.put(id, new TreeEntry(id, TreeEntryType.BLOCK, blockId, blockId,
-                parentId, nextOrder(parentId), false));
-
-        BlockConfig source = BLOCKS.get(sourceEntryId);
-        if (sourceEntryId.startsWith("block|") && source != null) {
-            // Moving an implicit root row into a folder transfers its own settings.
-            BLOCKS.remove(sourceEntryId);
-            BLOCKS.put(id, source.copyFor(blockId));
-            return;
-        }
-        if (source == null) {
-            TreeEntry topmost = findTopmostBlockEntry(blockId);
-            // Claim a legacy block-wide record only when this newly placed occurrence
-            // now has precedence. Lower-priority duplicates never inherit another copy's settings.
-            if (topmost != null && topmost.id().equals(id)) {
-                source = BLOCKS.remove(blockId);
-            }
-        }
-        if (source != null) BLOCKS.put(id, source.copyFor(blockId));
     }
 
     private static String tagBlockParentFromEntryId(String entryId) {
