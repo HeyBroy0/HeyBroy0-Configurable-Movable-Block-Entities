@@ -39,6 +39,7 @@ public final class ChangedBlocksScreen extends Screen {
     private final List<String> returnFocusEntryIds;
     private final int returnFocusIndex;
     private final Map<String, ConfigStore.TreeEntry> selectedItems = new LinkedHashMap<>();
+    private boolean singleSelectionAdded;
     private int page;
     private int treeScrollOffset;
     private int selectionScrollOffset;
@@ -69,6 +70,7 @@ public final class ChangedBlocksScreen extends Screen {
     private Button focusButton;
     private Button deleteButton;
     private Button copyButton;
+    private Button deselectAllButton;
     private Button undoButton;
     private Button redoButton;
     private Button configDirectoryButton;
@@ -121,12 +123,11 @@ public final class ChangedBlocksScreen extends Screen {
                         rangeAnchor = findVisibleRowIndex(activeEntryId);
                     } else {
                         bulkMode = false;
-                        // Ordinary mode keeps the active item highlighted, not a hidden group.
-                        ConfigStore.TreeEntry keep = selectedItems.get(activeEntryId);
-                        selectedItems.clear();
-                        if (keep != null) selectedItems.put(keep.id(), keep);
+                        // Keep the complete group when leaving bulk mode. The next ordinary
+                        // click can replace only its transient single-item addition.
                         bulkParentId = null;
                         selectionScrollOffset = 0;
+                        singleSelectionAdded = false;
                     }
                     hoveredRow = -1;
                     rebuildVisibleRows();
@@ -142,6 +143,9 @@ public final class ChangedBlocksScreen extends Screen {
                 "Redo last undone edit", button -> runRedo());
         copyButton = addButton("", left + 312, top + TOOLBAR_Y, 30, 24,
                 "Copy selected entries", button -> copySelectedEntries());
+        deselectAllButton = addButton("", left + PANEL_WIDTH - 96, top + TREE_Y + 1, 78, 16,
+                "Deselect all selected entries", button -> deselectAll());
+        deselectAllButton.visible = false;
 
         entryNameBox = new EditBox(font, left + 18, top + EDIT_Y, 360, 18,
                 Component.literal("Search changed blocks"));
@@ -218,6 +222,8 @@ public final class ChangedBlocksScreen extends Screen {
         focusButton.active = canFocus;
         deleteButton.active = !selectedItems.isEmpty() || active != null;
         copyButton.active = !selectedItems.isEmpty() || active != null;
+        deselectAllButton.visible = bulkMode;
+        deselectAllButton.active = bulkMode && !selectedItems.isEmpty();
         undoButton.active = ConfigStore.canUndo();
         redoButton.active = ConfigStore.canRedo();
         bulkButton.setMessage(Component.empty());
@@ -242,15 +248,15 @@ public final class ChangedBlocksScreen extends Screen {
         List<String> ids = new ArrayList<>(selectedItems.keySet());
         String destinationParent = bulkMode ? bulkParentId : activeFolderParent();
         ConfigStore.createFolder(name, destinationParent, ids);
-        selectedItems.clear();
-        activeEntryId = null;
-        activeEntrySnapshot = null;
-        rangeAnchor = -1;
+        // Folder creation relocates the selected entries; preserve their selection identity.
         entryDraft = "";
-        bulkMode = false;
-        bulkParentId = null;
+        rangeAnchor = -1;
+        if (bulkMode) bulkParentId = destinationParent;
         treeScrollOffset = 0;
         page = 0;
+        refreshTree();
+        refreshSelectedEntrySnapshots();
+        selectionChanged();
         init();
     }
 
@@ -509,20 +515,21 @@ public final class ChangedBlocksScreen extends Screen {
 
     private void clearSelection() {
         selectedItems.clear();
+        singleSelectionAdded = false;
     }
 
     private void selectionChanged() {
         if (selectedItems.isEmpty()) {
-            // An empty selection always returns the toolbar to ordinary mode.
-            bulkMode = false;
-            bulkParentId = null;
             selectionScrollOffset = 0;
             activeEntryId = null;
             activeEntrySnapshot = null;
+            singleSelectionAdded = false;
+            if (!bulkMode) bulkParentId = null;
         } else {
             selectionScrollOffset = Math.max(0, Math.min(selectionScrollOffset,
                     Math.max(0, selectedItems.size() - maxSelectionRows())));
             if (activeEntryId == null || !selectedItems.containsKey(activeEntryId)) {
+                singleSelectionAdded = false;
                 ConfigStore.TreeEntry remaining = selectedItems.values().stream()
                         .reduce((first, second) -> second).orElse(null);
                 activeEntrySnapshot = remaining;
@@ -577,12 +584,40 @@ public final class ChangedBlocksScreen extends Screen {
             return;
         }
 
+        if (!bulkMode && (event.hasShiftDown() || event.hasControlDown())) {
+            // Modifier-click is an immediate transition into an additive bulk selection.
+            ConfigStore.TreeEntry previousActive = activeEntry();
+            bulkMode = true;
+            bulkParentId = previousActive == null ? entry.parentId() : previousActive.parentId();
+            if (event.hasShiftDown()) {
+                int anchor = findVisibleRowIndex(activeEntryId);
+                if (anchor < 0) anchor = rowIndex;
+                rangeAnchor = anchor;
+                selectRange(rowIndex, true);
+            } else {
+                // Ctrl-click adds only this row; it does not infer a range.
+                rangeAnchor = rowIndex;
+                addSelected(entry);
+            }
+            activeEntryId = entry.id();
+            activeEntrySnapshot = entry;
+            singleSelectionAdded = false;
+            pendingDeselect = false;
+            pressedEntry = null;
+            pressedEntries = List.of();
+            dragging = false;
+            refreshTree();
+            selectionChanged();
+            return;
+        }
+
         if (bulkMode && event.hasShiftDown()) {
             boolean selectRangeState = !selectedItems.containsKey(entry.id());
             if (rangeAnchor < 0 || rangeAnchor >= visibleRows.size()) rangeAnchor = rowIndex;
             selectRange(rowIndex, selectRangeState);
             activeEntryId = entry.id();
             activeEntrySnapshot = entry;
+            singleSelectionAdded = false;
             pendingDeselect = false;
             pressedEntry = null;
             pressedEntries = List.of();
@@ -596,17 +631,23 @@ public final class ChangedBlocksScreen extends Screen {
         if (doubleClick) {
             if (!bulkMode) clearSelection();
             addSelected(entry);
+            singleSelectionAdded = false;
             pendingDeselect = false;
         } else if (wasSelected) {
             // Defer deselection until release so dragging a selected row can move the group.
             pendingDeselect = true;
         } else {
             if (!bulkMode) {
-                clearSelection();
-                bulkParentId = entry.parentId();
+                // Replace only the previous ordinary single-click addition. Selections
+                // retained from bulk mode remain in the group.
+                if (singleSelectionAdded && activeEntryId != null) {
+                    selectedItems.remove(activeEntryId);
+                }
+                singleSelectionAdded = true;
             } else if (selectedItems.isEmpty()) {
                 // A bulk session started empty: place a new folder beside the first chosen item.
                 bulkParentId = entry.parentId();
+                singleSelectionAdded = false;
             }
             addSelected(entry);
             pendingDeselect = false;
@@ -656,6 +697,32 @@ public final class ChangedBlocksScreen extends Screen {
         roots = ConfigStore.rootEntries();
         page = Math.min(page, pageCount() - 1);
         rebuildVisibleRows();
+    }
+
+    private void refreshSelectedEntrySnapshots() {
+        Map<String, ConfigStore.TreeEntry> currentEntries = new LinkedHashMap<>();
+        for (ConfigStore.TreeEntry entry : ConfigStore.treeEntriesTopDown()) {
+            currentEntries.put(entry.id(), entry);
+        }
+        for (String id : new ArrayList<>(selectedItems.keySet())) {
+            ConfigStore.TreeEntry current = currentEntries.get(id);
+            if (current == null) selectedItems.remove(id);
+            else selectedItems.put(id, current);
+        }
+        if (activeEntryId != null) {
+            ConfigStore.TreeEntry current = currentEntries.get(activeEntryId);
+            if (current != null) activeEntrySnapshot = current;
+        }
+    }
+
+    private void deselectAll() {
+        clearSelection();
+        activeEntryId = null;
+        activeEntrySnapshot = null;
+        rangeAnchor = -1;
+        selectionScrollOffset = 0;
+        selectionChanged();
+        refreshTree();
     }
 
     private String entryLabel(ConfigStore.TreeEntry entry) {
@@ -826,6 +893,7 @@ public final class ChangedBlocksScreen extends Screen {
         drawTextButtonLabel(graphics, previousButton, "‹ Previous");
         drawTextButtonLabel(graphics, nextButton, "Next ›");
         drawTextButtonLabel(graphics, backButton, "Back");
+        drawTextButtonLabel(graphics, deselectAllButton, "Deselect all");
     }
 
     private void drawTextButtonLabel(GuiGraphicsExtractor graphics, Button button, String label) {
@@ -903,9 +971,9 @@ public final class ChangedBlocksScreen extends Screen {
                     String id = new ArrayList<>(selectedItems.keySet()).get(item);
                     selectedItems.remove(id);
                     if (id.equals(activeEntryId)) {
-                        ConfigStore.TreeEntry remaining = selectedItems.values().stream().reduce((first, second) -> second).orElse(null);
-                        activeEntrySnapshot = remaining;
-                        activeEntryId = remaining == null ? null : remaining.id();
+                        activeEntrySnapshot = null;
+                        activeEntryId = null;
+                        singleSelectionAdded = false;
                     }
                     selectionChanged();
                     refreshTree();
@@ -979,9 +1047,8 @@ public final class ChangedBlocksScreen extends Screen {
             dragIntoFolder = false;
             dragAfterTarget = false;
             if (moved) {
-                clearSelection();
-                activeEntryId = null;
-                activeEntrySnapshot = null;
+                refreshTree();
+                refreshSelectedEntrySnapshots();
                 selectionChanged();
             }
             refreshTree();
@@ -991,9 +1058,9 @@ public final class ChangedBlocksScreen extends Screen {
         if (pendingDeselect && pressedEntry != null) {
             selectedItems.remove(pressedEntry.id());
             if (pressedEntry.id().equals(activeEntryId)) {
-                ConfigStore.TreeEntry remaining = selectedItems.values().stream().reduce((first, second) -> second).orElse(null);
-                activeEntrySnapshot = remaining;
-                activeEntryId = remaining == null ? null : remaining.id();
+                activeEntrySnapshot = null;
+                activeEntryId = null;
+                singleSelectionAdded = false;
             }
             selectionChanged();
             refreshTree();
