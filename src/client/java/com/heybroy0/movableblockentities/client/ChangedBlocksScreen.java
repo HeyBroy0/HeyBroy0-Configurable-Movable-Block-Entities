@@ -34,6 +34,10 @@ public final class ChangedBlocksScreen extends Screen {
     private static final int FOOTER_Y = 314;
 
     private final String returnBlock;
+    private final String returnEntryId;
+    private final String returnFocusContainerId;
+    private final List<String> returnFocusEntryIds;
+    private final int returnFocusIndex;
     private final Map<String, ConfigStore.TreeEntry> selectedItems = new LinkedHashMap<>();
     private int page;
     private int treeScrollOffset;
@@ -75,8 +79,17 @@ public final class ChangedBlocksScreen extends Screen {
     private List<ConfigStore.TreeEntry> roots = List.of();
 
     public ChangedBlocksScreen(String returnBlock, int page) {
+        this(returnBlock, null, page, null, List.of(), -1);
+    }
+
+    public ChangedBlocksScreen(String returnBlock, String returnEntryId, int page,
+                               String focusContainerId, List<String> focusEntryIds, int focusIndex) {
         super(Component.literal("Changed Blocks"));
         this.returnBlock = returnBlock;
+        this.returnEntryId = returnEntryId;
+        this.returnFocusContainerId = focusContainerId;
+        this.returnFocusEntryIds = focusEntryIds == null ? List.of() : List.copyOf(focusEntryIds);
+        this.returnFocusIndex = focusIndex;
         this.page = Math.max(0, page);
     }
 
@@ -145,7 +158,14 @@ public final class ChangedBlocksScreen extends Screen {
             init();
         });
         backButton = addButton("", left + PANEL_WIDTH - 126, top + FOOTER_Y, 108, 20,
-                button -> minecraft.gui.setScreen(new MainConfigScreen(returnBlock)));
+                button -> {
+                    boolean preserveFocus = returnFocusContainerId != null
+                            && ConfigStore.findTreeEntry(returnFocusContainerId) != null;
+                    minecraft.gui.setScreen(new MainConfigScreen(returnBlock, returnEntryId,
+                            preserveFocus ? returnFocusContainerId : null,
+                            preserveFocus ? returnFocusEntryIds : List.of(),
+                            preserveFocus ? returnFocusIndex : -1));
+                });
 
         refreshToolbar();
     }
@@ -228,8 +248,7 @@ public final class ChangedBlocksScreen extends Screen {
         if (active == null) return;
         if (active.type() == ConfigStore.TreeEntryType.BLOCK) {
             ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(active.id(), active.value());
-            minecraft.gui.setScreen(new MainConfigScreen(active.value(),
-                    touched == null ? active.id() : touched.id()));
+            minecraft.gui.setScreen(mainScreenForBlock(touched == null ? active : touched));
             return;
         }
         active = ConfigStore.focusTreeEntry(active.id());
@@ -255,6 +274,35 @@ public final class ChangedBlocksScreen extends Screen {
         ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(first.id(), first.value());
         minecraft.gui.setScreen(new MainConfigScreen(first.value(),
                 touched == null ? first.id() : touched.id(), active.id(), focusTargets, 0));
+    }
+
+    private MainConfigScreen mainScreenForBlock(ConfigStore.TreeEntry entry) {
+        if (returnFocusContainerId != null && ConfigStore.findTreeEntry(returnFocusContainerId) != null) {
+            List<ConfigStore.TreeEntry> contained = ConfigStore.blockEntriesUnder(returnFocusContainerId);
+            ConfigStore.TreeEntry occurrence = contained.stream()
+                    .filter(candidate -> candidate.id().equals(entry.id()))
+                    .findFirst()
+                    .orElseGet(() -> contained.stream()
+                            .filter(candidate -> candidate.value().equals(entry.value()))
+                            .findFirst().orElse(null));
+            if (occurrence != null) {
+                return new MainConfigScreen(occurrence.value(), occurrence.id(),
+                        returnFocusContainerId, returnFocusEntryIds,
+                        focusTargetIndex(occurrence));
+            }
+        }
+        // Selecting an item outside the originating scope deliberately drops that focus.
+        return new MainConfigScreen(entry.value(), entry.id());
+    }
+
+    private int focusTargetIndex(ConfigStore.TreeEntry occurrence) {
+        ConfigStore.TreeEntry cursor = occurrence;
+        while (cursor != null) {
+            int index = returnFocusEntryIds.indexOf(cursor.id());
+            if (index >= 0) return index;
+            cursor = cursor.parentId() == null ? null : ConfigStore.findTreeEntry(cursor.parentId());
+        }
+        return 0;
     }
 
     private void deleteSelectedEntries() {
@@ -584,8 +632,7 @@ public final class ChangedBlocksScreen extends Screen {
             if (doubleClick) {
                 ConfigStore.TreeEntry touched = ConfigStore.touchTreeEntry(entry.id(), entry.value());
                 if (entry.parentId() == null) page = 0;
-                minecraft.gui.setScreen(new MainConfigScreen(entry.value(),
-                        touched == null ? entry.id() : touched.id()));
+                minecraft.gui.setScreen(mainScreenForBlock(touched == null ? entry : touched));
             }
         } else {
             if (doubleClick) {
