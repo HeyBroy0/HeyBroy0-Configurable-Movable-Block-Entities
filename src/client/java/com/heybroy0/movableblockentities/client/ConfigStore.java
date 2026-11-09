@@ -311,10 +311,12 @@ public final class ConfigStore {
             if (entry != null && entry.type() == TreeEntryType.BLOCK) {
                 TreeEntry topmost = findTopmostBlockEntry(entry.value());
                 if (topmost != null && topmost.id().equals(id)) BLOCKS.remove(entry.value());
-            } else if (id.startsWith("block|")) {
-                String blockId = id.substring("block|".length());
-                TreeEntry topmost = findTopmostBlockEntry(blockId);
-                if (topmost == null || topmost.id().equals(id)) BLOCKS.remove(blockId);
+            } else if (id.startsWith("block|") || id.startsWith("tagblock|")) {
+                String blockId = blockIdFromEntryId(id);
+                if (blockId != null) {
+                    TreeEntry topmost = findTopmostBlockEntry(blockId);
+                    if (topmost == null || topmost.id().equals(id)) BLOCKS.remove(blockId);
+                }
             }
             BLOCKS.remove(id);
             TREE_ENTRIES.remove(id);
