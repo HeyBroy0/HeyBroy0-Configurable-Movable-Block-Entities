@@ -36,8 +36,10 @@ public final class ResponsiveUi {
 
     public static double toLogicalX(double mouseX, int screenWidth, int screenHeight,
                                     int baseWidth, int baseHeight) {
+        // A small rightward correction compensates for the text-field hit/caret position
+        // landing slightly left of the pointer after the scaled GUI transform.
         return (mouseX - offsetX(screenWidth, screenHeight, baseWidth, baseHeight))
-                / scale(screenWidth, screenHeight, baseWidth, baseHeight);
+                / scale(screenWidth, screenHeight, baseWidth, baseHeight) + 2.0D;
     }
 
     public static double toLogicalY(double mouseY, int screenWidth, int screenHeight,

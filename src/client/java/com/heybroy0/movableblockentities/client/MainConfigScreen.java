@@ -34,6 +34,8 @@ public final class MainConfigScreen extends Screen {
 
     private final Deque<String> searchUndoHistory = new ArrayDeque<>();
     private boolean applyingSearchUndo;
+    private boolean suppressSuggestionActivation;
+    private boolean suggestionsEnabled;
     private String lastObservedSearchValue = "";
 
     private String selectedBlockId;
@@ -121,8 +123,10 @@ public final class MainConfigScreen extends Screen {
                 button -> minecraft.gui.setScreen(null));
 
         refreshControlLabels();
-        searchBox.setFocused(true);
+        // Keep the screen's focus manager and the text field in sync (also starts SDL text input).
         setInitialFocus(searchBox);
+        setFocused(searchBox);
+        suggestionsEnabled = false;
     }
 
     private Button addButton(String label, int x, int y, int w, int h, Button.OnPress action) {
@@ -174,6 +178,10 @@ public final class MainConfigScreen extends Screen {
     }
 
     private void onSearchValueChanged(String value) {
+        if (!suppressSuggestionActivation) {
+            // The restored query stays quiet until the player edits it during this screen visit.
+            suggestionsEnabled = true;
+        }
         if (!applyingSearchUndo && !value.equals(lastObservedSearchValue)) {
             searchUndoHistory.addLast(lastObservedSearchValue);
             while (searchUndoHistory.size() > 64) {
@@ -234,7 +242,8 @@ public final class MainConfigScreen extends Screen {
     }
 
     private boolean suggestionsOpen() {
-        return searchBox != null && searchBox.isFocused() && !searchBox.getValue().isBlank() && !suggestions.isEmpty();
+        return suggestionsEnabled && searchBox != null && getFocused() == searchBox
+                && searchBox.isFocused() && !searchBox.getValue().isBlank() && !suggestions.isEmpty();
     }
 
     private int popupX() { return left + 20; }
@@ -313,12 +322,20 @@ public final class MainConfigScreen extends Screen {
         selectedBlockId = id;
         lastSelectedBlockId = id;
         config = ConfigStore.get(id);
-        searchBox.setValue(id);
+        // Updating the text to the selected block is not a user edit and must not reopen autocomplete.
+        suppressSuggestionActivation = true;
+        try {
+            searchBox.setValue(id);
+        } finally {
+            suppressSuggestionActivation = false;
+        }
         searchBox.setCursorPosition(id.length());
-        searchBox.setFocused(false);
+        suggestionsEnabled = false;
         suggestions = List.of();
         suggestionScrollOffset = 0;
         hoveredSuggestionIndex = -1;
+        // Keep keyboard/SDL text input active so another query can be typed immediately.
+        setFocused(searchBox);
         pushCostBox.setValue(Integer.toString(config.pushCost));
         refreshControlLabels();
     }
@@ -383,7 +400,29 @@ public final class MainConfigScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(logicalEvent, doubleClick);
+        boolean insideSearch = searchBox != null
+                && logicalEvent.x() >= searchBox.getX()
+                && logicalEvent.x() < searchBox.getX() + searchBox.getWidth()
+                && logicalEvent.y() >= searchBox.getY()
+                && logicalEvent.y() < searchBox.getY() + searchBox.getHeight();
+
+        if (!insideSearch) {
+            // Clicking elsewhere dismisses autocomplete and relinquishes the text-input focus.
+            suggestionsEnabled = false;
+            hoveredSuggestionIndex = -1;
+            if (getFocused() == searchBox) {
+                setFocused(null);
+            } else if (searchBox != null && searchBox.isFocused()) {
+                searchBox.setFocused(false);
+            }
+        }
+
+        boolean handled = super.mouseClicked(logicalEvent, doubleClick);
+        if (insideSearch) {
+            // Explicitly synchronize the Screen focus owner with the EditBox.
+            setFocused(searchBox);
+        }
+        return handled || insideSearch;
     }
 
     @Override
@@ -450,7 +489,8 @@ public final class MainConfigScreen extends Screen {
         graphics.text(font, "Scheduled ticks", left + 22, top + 157, 0xFFE5E8EB);
         graphics.text(font, "Push cost (1 / n)", left + 22, top + 193, 0xFFE5E8EB);
         graphics.text(font, "Adhesion", left + 22, top + 227, 0xFFE5E8EB);
-        graphics.text(font, "O opens this screen  •  Settings are saved locally.", left + 20, top + 268, 0xFF9CA4AC);
+        graphics.text(font, MovableBlockEntitiesClient.getOpenConfigurationKeyName()
+                + " opens this screen  •  Settings are saved locally.", left + 20, top + 268, 0xFF9CA4AC);
         graphics.text(font, "Tab / Shift+Tab navigate  •  Enter selects  •  Mouse wheel scrolls the list",
                 left + 20, top + 286, 0xFF9CA4AC);
 

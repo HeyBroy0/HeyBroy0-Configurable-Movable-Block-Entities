@@ -11,6 +11,12 @@ public final class MovableBlockEntitiesClient implements ClientModInitializer {
     public static final String MOD_ID = "movable_block_entities";
     private static KeyMapping openConfiguration;
 
+    public static String getOpenConfigurationKeyName() {
+        return openConfiguration == null
+                ? "O"
+                : openConfiguration.getTranslatedKeyMessage().getString();
+    }
+
     @Override
     public void onInitializeClient() {
         ConfigStore.load();
