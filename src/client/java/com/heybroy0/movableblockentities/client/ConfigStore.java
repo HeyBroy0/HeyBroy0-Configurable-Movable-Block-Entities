@@ -558,6 +558,19 @@ public final class ConfigStore {
         if (source == null || entryIds == null || entryIds.isEmpty()) return;
         for (String id : entryIds) {
             TreeEntry entry = TREE_ENTRIES.get(id);
+            if (entry == null && id != null && id.startsWith("tagblock|")) {
+                int separator = id.lastIndexOf('|');
+                if (separator > "tagblock|".length()) {
+                    String selectorId = id.substring("tagblock|".length(), separator);
+                    String blockId = id.substring(separator + 1);
+                    TreeEntry selector = TREE_ENTRIES.get(selectorId);
+                    if (selector != null && selector.type() == TreeEntryType.SELECTOR) {
+                        entry = new TreeEntry(id, TreeEntryType.BLOCK, blockId, blockId,
+                                selectorId, nextOrder(selectorId), false);
+                        TREE_ENTRIES.put(id, entry);
+                    }
+                }
+            }
             if (entry == null || entry.type() != TreeEntryType.BLOCK) continue;
             BLOCKS.put(id, source.copyFor(entry.value()));
         }
