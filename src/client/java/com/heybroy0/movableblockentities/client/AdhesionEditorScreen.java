@@ -260,8 +260,9 @@ public final class AdhesionEditorScreen extends Screen {
 
         super.extractRenderState(graphics, logicalMouseX, logicalMouseY, a);
 
-        drawValue(graphics, left + 296, top + 129, Integer.toString(config.minimumSquare));
-        drawValue(graphics, left + 296, top + 166, Integer.toString(config.depth));
+        int valueX = page == Page.ADVANCED ? left + 225 : left + 296;
+        drawValue(graphics, valueX, top + 129, Integer.toString(config.minimumSquare));
+        drawValue(graphics, valueX, top + 166, Integer.toString(config.depth));
 
         if (page == Page.ADVANCED) {
             drawCubeNet(graphics, logicalMouseX, logicalMouseY);
@@ -277,9 +278,10 @@ public final class AdhesionEditorScreen extends Screen {
     }
 
     private void drawValue(GuiGraphicsExtractor graphics, int x, int y, String value) {
-        graphics.fill(x, y, x + 130, y + 22, 0xFF1F2327);
-        graphics.outline(x, y, 130, 22, 0xFF545D66);
-        graphics.centeredText(font, value, x + 65, y + 7, 0xFFFFFFFF);
+        int width = page == Page.ADVANCED ? 60 : 130;
+        graphics.fill(x, y, x + width, y + 22, 0xFF1F2327);
+        graphics.outline(x, y, width, 22, 0xFF545D66);
+        graphics.centeredText(font, value, x + width / 2, y + 7, 0xFFFFFFFF);
     }
 
     @Override
