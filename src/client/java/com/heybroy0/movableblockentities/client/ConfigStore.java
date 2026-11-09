@@ -289,6 +289,16 @@ public final class ConfigStore {
             for (String selectedId : selected) {
                 if (selectedId == null || selectedId.isBlank() || selectedId.equals(id)) continue;
                 TreeEntry existing = TREE_ENTRIES.get(selectedId);
+                if (existing != null && selectedId.startsWith("tagblock|")
+                        && existing.type() == TreeEntryType.BLOCK) {
+                    String selectorId = existing.parentId();
+                    // A selector membership is a distinct occurrence. Put a copy in the folder
+                    // while preserving the selector's live member and its own settings.
+                    if (selectorId == null || !selected.contains(selectorId)) {
+                        copyBlockNode(existing.value(), existing.id(), id);
+                    }
+                    continue;
+                }
                 if (existing != null) {
                     // If both a container and its descendant are selected, moving the container
                     // carries the descendant with it. Do not detach the descendant as a sibling.
@@ -301,8 +311,9 @@ public final class ConfigStore {
 
                 String blockId = blockIdFromEntryId(selectedId);
                 if (blockId != null) {
-                    // Generated selector/root rows are occurrences too. Copy them into the folder
-                    // instead of finding and moving an unrelated occurrence with the same block id.
+                    String selectorId = tagBlockParentFromEntryId(selectedId);
+                    if (selectorId != null && selected.contains(selectorId)) continue;
+                    // A generated selector row is copied; a generated root row is moved.
                     copyBlockNode(blockId, selectedId, id);
                 }
             }
@@ -321,15 +332,27 @@ public final class ConfigStore {
                 parentId, nextOrder(parentId), false));
 
         BlockConfig source = BLOCKS.get(sourceEntryId);
+        if (sourceEntryId.startsWith("block|") && source != null) {
+            // Moving an implicit root row into a folder transfers its own settings.
+            BLOCKS.remove(sourceEntryId);
+            BLOCKS.put(id, source.copyFor(blockId));
+            return;
+        }
         if (source == null) {
             TreeEntry topmost = findTopmostBlockEntry(blockId);
-            // Claim a legacy block-wide record only when the selected occurrence currently
-            // has precedence. A lower-priority duplicate must not inherit another copy's settings.
-            if (topmost != null && topmost.id().equals(sourceEntryId)) {
+            // Claim a legacy block-wide record only when this newly placed occurrence
+            // now has precedence. Lower-priority duplicates never inherit another copy's settings.
+            if (topmost != null && topmost.id().equals(id)) {
                 source = BLOCKS.remove(blockId);
             }
         }
         if (source != null) BLOCKS.put(id, source.copyFor(blockId));
+    }
+
+    private static String tagBlockParentFromEntryId(String entryId) {
+        if (entryId == null || !entryId.startsWith("tagblock|")) return null;
+        int separator = entryId.indexOf('|', "tagblock|".length());
+        return separator < 0 ? null : entryId.substring("tagblock|".length(), separator);
     }
 
     private static boolean hasSelectedAncestor(TreeEntry entry, java.util.Set<String> selected) {
