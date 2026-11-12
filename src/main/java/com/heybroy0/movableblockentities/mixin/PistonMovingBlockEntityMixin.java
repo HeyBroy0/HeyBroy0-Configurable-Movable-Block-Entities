@@ -1,10 +1,8 @@
 package com.heybroy0.movableblockentities.mixin;
 
-import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
-
 import com.heybroy0.movableblockentities.MovementGroups;
+import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -20,21 +18,6 @@ abstract class PistonMovingBlockEntityMixin implements PistonMovingBlockEntityIn
     @org.spongepowered.asm.mixin.gen.Invoker("finalTick")
     @Override
     public abstract void movableblockentities$invokeFinalTick();
-    @Inject(
-            method = "<init>(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;ZZ)V",
-            at = @At("TAIL")
-    )
-    private void movableblockentities$captureSourceData(
-            BlockPos position,
-            BlockState movingState,
-            BlockState movedState,
-            Direction movementDirection,
-            boolean extending,
-            boolean sourcePiston,
-            CallbackInfo callback
-    ) {
-        MovementGroups.captureFromMovingEntity(position, movedState, movementDirection);
-    }
 
     @Inject(method = "setLevel", at = @At("TAIL"))
     private void movableblockentities$registerMovementGroup(Level level, CallbackInfo callback) {
@@ -56,11 +39,8 @@ abstract class PistonMovingBlockEntityMixin implements PistonMovingBlockEntityIn
 
     @Inject(method = "tick", at = @At("TAIL"))
     private static void movableblockentities$finishTickLanding(
-            Level level,
-            BlockPos position,
-            BlockState movingState,
-            PistonMovingBlockEntity entity,
-            CallbackInfo callback
+            Level level, BlockPos position, BlockState movingState,
+            PistonMovingBlockEntity entity, CallbackInfo callback
     ) {
         if (!level.isClientSide() && !level.getBlockState(position).is(Blocks.MOVING_PISTON)) {
             MovementGroups.finish(level, position, entity);

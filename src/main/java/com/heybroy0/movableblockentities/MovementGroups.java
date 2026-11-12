@@ -2,7 +2,6 @@ package com.heybroy0.movableblockentities;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.AbstractBedBlock;
@@ -64,48 +63,38 @@ public final class MovementGroups {
         }
     }
 
-    /** Snapshots block entity data and pending ticks before vanilla clears the source. */
-    public static void captureFromMovingEntity(
-            BlockPos destination, BlockState movedState, Direction movementDirection
-    ) {
+    /**
+     * Snapshot scheduled ticks while the resolver still exposes the original source
+     * blocks. FrozenLib is the sole owner of block-entity serialization and restoration.
+     */
+    public static void captureResolved(Level level, List<BlockPos> sources, Direction movementDirection) {
         Deque<Operation> stack = OPERATIONS.get();
-        if (stack.isEmpty()) {
-            return;
-        }
+        if (stack.isEmpty() || level == null || level.isClientSide()) return;
         Operation operation = stack.peek();
-        Level level = operation.level;
-        if (level.isClientSide()) {
-            return;
-        }
+        if (operation.level != level) return;
 
-        BlockPos target = destination.immutable();
-        BlockPos source = destination.relative(movementDirection.getOpposite()).immutable();
-        CompoundTag blockEntityData = null;
-        try {
-            BlockEntity blockEntity = level.getBlockEntity(source);
-            if (blockEntity != null && blockEntity.getBlockState().getBlock() == movedState.getBlock()) {
-                blockEntityData = blockEntity.saveWithFullMetadata(level.registryAccess());
+        for (BlockPos sourcePosition : sources) {
+            BlockPos source = sourcePosition.immutable();
+            BlockState movedState = level.getBlockState(source);
+            if (movedState.isAir()) continue;
+
+            BlockPos destination = source.relative(movementDirection).immutable();
+            String tickMode = PistonBehavior.settings(movedState).scheduledTicks();
+            List<ScheduledTick<Block>> scheduledTicks = List.of();
+            if ("TRANSFER".equals(tickMode) || "DUPLICATE".equals(tickMode)) {
+                LevelChunkTicks<Block> sourceTicks = blockTicks(level, source);
+                if (sourceTicks != null) {
+                    scheduledTicks = sourceTicks.getAll()
+                            .filter(tick -> tick.pos().equals(source) && tick.type() == movedState.getBlock())
+                            .toList();
+                }
             }
-        } catch (RuntimeException exception) {
-            System.err.println("[Movable Block Entities] Could not snapshot block entity at "
-                    + source + ": " + exception.getMessage());
-        }
 
-        String tickMode = PistonBehavior.settings(movedState).scheduledTicks();
-        List<ScheduledTick<Block>> scheduledTicks = List.of();
-        if ("TRANSFER".equals(tickMode) || "DUPLICATE".equals(tickMode)) {
-            LevelChunkTicks<Block> sourceTicks = blockTicks(level, source);
-            if (sourceTicks != null) {
-                scheduledTicks = sourceTicks.getAll()
-                        .filter(tick -> tick.pos().equals(source) && tick.type() == movedState.getBlock())
-                        .toList();
+            operation.group.positions.add(destination);
+            if (!scheduledTicks.isEmpty()) {
+                operation.group.snapshots.put(destination,
+                        new MoveSnapshot(source, movedState.getBlock(), scheduledTicks, tickMode));
             }
-        }
-
-        if (blockEntityData != null || !scheduledTicks.isEmpty()) {
-            operation.group.snapshots.put(target, new MoveSnapshot(
-                    source, movedState.getBlock(), blockEntityData, scheduledTicks, tickMode
-            ));
         }
     }
 
@@ -243,30 +232,7 @@ public final class MovementGroups {
             return;
         }
 
-        restoreBlockEntity(level, immutable, snapshot);
         restoreScheduledTicks(level, immutable, snapshot);
-    }
-
-    private static void restoreBlockEntity(Level level, BlockPos destination, MoveSnapshot snapshot) {
-        if (snapshot.blockEntityData == null) {
-            return;
-        }
-        try {
-            BlockState landedState = level.getBlockState(destination);
-            BlockEntity current = level.getBlockEntity(destination);
-            if (current != null) {
-                level.removeBlockEntity(destination);
-            }
-            BlockEntity restored = BlockEntity.loadStatic(
-                    destination, landedState, snapshot.blockEntityData, level.registryAccess()
-            );
-            if (restored != null) {
-                level.setBlockEntity(restored);
-            }
-        } catch (RuntimeException exception) {
-            System.err.println("[Movable Block Entities] Could not restore block entity at "
-                    + destination + ": " + exception.getMessage());
-        }
     }
 
     private static void restoreScheduledTicks(Level level, BlockPos destination, MoveSnapshot snapshot) {
@@ -324,7 +290,6 @@ public final class MovementGroups {
     private record MoveSnapshot(
             BlockPos source,
             Block expectedBlock,
-            CompoundTag blockEntityData,
             List<ScheduledTick<Block>> scheduledTicks,
             String tickMode
     ) {
