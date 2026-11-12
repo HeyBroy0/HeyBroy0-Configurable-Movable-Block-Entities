@@ -31,10 +31,13 @@ dependencies {
     include project(":core")
 }
 
-processResources {
-    inputs.property "version", project.mod_version
+// Capture the version during configuration so the task closure remains compatible
+// with Gradle's configuration cache.
+def configuredModVersion = providers.gradleProperty("mod_version").get()
+tasks.named("processResources") {
+    inputs.property "version", configuredModVersion
     filesMatching("fabric.mod.json") {
-        expand "version": project.mod_version
+        expand "version": configuredModVersion
     }
 }
 
