@@ -10,3 +10,398 @@ levers and other hangable objects do not break off when pistons are activated an
 
 Lower priority, figure out later:
 Combine (wood type)_wall_sign and (wood type)_sign into the same block, since they refer to the same block in different forms. Not to confuse with the new hanging sign type (which also has wall variants) Banners, torches, lanterns, and more work the same way.
+
+
+Attempted to move a sculk_shrieker:
+
+---- Minecraft Crash Report ----
+// There are four lights!
+
+Time: 2026-11-12 01:29:18
+Description: Ticking block entity
+
+java.lang.IllegalArgumentException: Cannot get property BooleanProperty{name=shrieking, clazz=class java.lang.Boolean, values=[true, false]} as it does not exist in Block{minecraft:moving_piston}
+	at knot//net.minecraft.world.level.block.state.StateHolder.getValue(StateHolder.java:102)
+	at knot//net.minecraft.world.level.block.entity.SculkShriekerBlockEntity.preRemoveSideEffects(SculkShriekerBlockEntity.java:162)
+	at knot//net.minecraft.world.level.chunk.LevelChunk.setBlockState(LevelChunk.java:300)
+	at knot//net.minecraft.world.level.Level.setBlock(Level.java:234)
+	at knot//net.minecraft.world.level.LevelWriter.setBlock(LevelWriter.java:19)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$58(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$dbk000$frozenlib$frozenLib$setBlockTick(PistonMovingBlockEntityMixin.java:119)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$dbk000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$54(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.tick(PistonMovingBlockEntity.java:334)
+	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
+	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
+	at knot//net.minecraft.world.level.Level.tickBlockEntities(Level.java:475)
+	at knot//net.minecraft.server.level.ServerLevel.tick(ServerLevel.java:461)
+	at knot//net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1116)
+	at knot//net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:980)
+	at knot//net.minecraft.client.server.IntegratedServer.tickServer(IntegratedServer.java:139)
+	at knot//net.minecraft.server.MinecraftServer.processPacketsAndTick(MinecraftServer.java:1013)
+	at knot//net.minecraft.client.server.IntegratedServer.processPacketsAndTick(IntegratedServer.java:107)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:752)
+	at knot//net.minecraft.server.MinecraftServer.lambda$spin$0(MinecraftServer.java:310)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.world.level.block.state.StateHolder.getValue(StateHolder.java:102)
+	at knot//net.minecraft.world.level.block.entity.SculkShriekerBlockEntity.preRemoveSideEffects(SculkShriekerBlockEntity.java:162)
+	at knot//net.minecraft.world.level.chunk.LevelChunk.setBlockState(LevelChunk.java:300)
+	at knot//net.minecraft.world.level.Level.setBlock(Level.java:234)
+	at knot//net.minecraft.world.level.LevelWriter.setBlock(LevelWriter.java:19)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$58(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$dbk000$frozenlib$frozenLib$setBlockTick(PistonMovingBlockEntityMixin.java:119)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$dbk000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$54(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.tick(PistonMovingBlockEntity.java:334)
+	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
+	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
+	at knot//net.minecraft.world.level.Level.tickBlockEntities(Level.java:475)
+
+-- Block entity being ticked --
+Details:
+	Name: minecraft:piston // net.minecraft.world.level.block.piston.PistonMovingBlockEntity
+	Cached block: Block{minecraft:moving_piston}[facing=south,type=normal]
+	Actual block: Block{minecraft:sculk_shrieker}[can_summon=false,shrieking=false,waterlogged=false]
+	Block location: World: (-9,-59,-4), Section: (at 7,5,12 in -1,-4,-1; chunk contains blocks -16,-64,-16 to -1,319,-1), Region: (-1,-1; contains chunks -32,-32 to -1,-1, blocks -512,-64,-512 to -1,319,-1)
+	Block Entity NBT: {blockState:"minecraft:sculk_shrieker",extending:1b,facing:3b,frozenLib_PushedBlockEntity:{DataVersion:5023,_FabricDataVersions:{},components:{},id:"minecraft:sculk_shrieker",listener:{event_delay:0,selector:{tick:-1L}},warning_level:0,x:-9,y:-59,z:-5},progress:1.0f,source:0b}
+Stacktrace:
+	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
+	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
+	at knot//net.minecraft.world.level.Level.tickBlockEntities(Level.java:475)
+	at knot//net.minecraft.server.level.ServerLevel.tick(ServerLevel.java:461)
+	at knot//net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1116)
+	at knot//net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:980)
+	at knot//net.minecraft.client.server.IntegratedServer.tickServer(IntegratedServer.java:139)
+	at knot//net.minecraft.server.MinecraftServer.processPacketsAndTick(MinecraftServer.java:1013)
+	at knot//net.minecraft.client.server.IntegratedServer.processPacketsAndTick(IntegratedServer.java:107)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:752)
+	at knot//net.minecraft.server.MinecraftServer.lambda$spin$0(MinecraftServer.java:310)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+-- Affected level --
+Details:
+	All players: 1 total; ServerPlayer{name=HeyBroyO, id=18, pos=(-7.0160264366704075, -55.23493643786543, -3.8881843762676156), mode=CREATIVE, permission=owner}
+	Chunk stats: 2209, 625
+	Level dimension: minecraft:overworld
+	Level time: 1509121 game time, 441542 day time
+	Level spawn location: World: (0,-60,0), Section: (at 0,4,0 in 0,-4,0; chunk contains blocks 0,-64,0 to 15,319,15), Region: (0,0; contains chunks 0,0 to 31,31, blocks 0,-64,0 to 511,319,511)
+	Level name: New World
+	Level game mode: Game mode: creative (ID 1). Hardcore: false. Commands: true
+	Known server brands: fabric
+	Removed feature flags: 
+	Level was modded: true
+	Level storage version: 0x04ABD - Anvil
+	Loaded entity count: 3
+	Server weather: Rain time: 169912 (now: false), thunder time: 38220 (now: false)
+Stacktrace:
+	at knot//net.minecraft.server.level.ServerLevel.fillReportDetails(ServerLevel.java:1892)
+	at knot//net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1119)
+	at knot//net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:980)
+	at knot//net.minecraft.client.server.IntegratedServer.tickServer(IntegratedServer.java:139)
+	at knot//net.minecraft.server.MinecraftServer.processPacketsAndTick(MinecraftServer.java:1013)
+	at knot//net.minecraft.client.server.IntegratedServer.processPacketsAndTick(IntegratedServer.java:107)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:752)
+	at knot//net.minecraft.server.MinecraftServer.lambda$spin$0(MinecraftServer.java:310)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+-- Dynamic Lighting --
+Details:
+	Description: This section contains information related to dynamic lighting, this may not be related to your crash.
+	Mode: fancy
+	Dynamic Light Sources: 0
+	Spatial Hash Occupancy: 0 / 1024
+
+-- System Details --
+Details:
+	Minecraft Version: 26.3
+	Minecraft Version ID: 26.3
+	Operating System: Windows 11 (amd64) version 10.0
+	Java Version: 25.0.1, Microsoft
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode), Microsoft
+	Memory: 180027136 bytes (171 MiB) / 1228931072 bytes (1172 MiB) up to 6442450944 bytes (6144 MiB)
+	Memory (heap): init: 512MiB, used: 992MiB, committed: 1172MiB, max: 6144MiB
+	Memory (non-heap): init: 007MiB, used: 312MiB, committed: 355MiB, max: 000MiB
+	CPUs: 16
+	Processor Vendor: AuthenticAMD
+	Processor Name: AMD Ryzen 7 5800U with Radeon Graphics         
+	Identifier: AuthenticAMD Family 25 Model 80 Stepping 0
+	Microarchitecture: Zen 3
+	Frequency (GHz): 1.90
+	Number of physical packages: 1
+	Number of physical CPUs: 8
+	Number of logical CPUs: 16
+	Graphics card #0 name: AMD Radeon(TM) Graphics
+	Graphics card #0 vendor: Advanced Micro Devices, Inc.
+	Graphics card #0 VRAM (MiB): 512.00
+	Graphics card #0 deviceId: VideoController1
+	Graphics card #0 versionInfo: 31.0.21921.1000
+	Memory slot #0 capacity (MiB): 8192.00
+	Memory slot #0 clockSpeed (GHz): 3.20
+	Memory slot #0 type: DDR4
+	Memory slot #1 capacity (MiB): 8192.00
+	Memory slot #1 clockSpeed (GHz): 3.20
+	Memory slot #1 type: DDR4
+	Virtual memory max (MiB): 26950.80
+	Virtual memory used (MiB): 14222.78
+	Swap memory total (MiB): 11237.32
+	Swap memory used (MiB): 268.06
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 225668.59, total: 975632.00
+	Space in storage for workdir (MiB): available: 225668.59, total: 975632.00
+	Operating System Version: Microsoft Windows 11 build 26200
+	Process Elevated: false
+	Process Loads: Uptime: 3035s, user: 1362s (44.88%), kernel: 698s (22.99%), total: 2060s (67.87%)
+	Process Virtual Size (MiB): 1851.95
+	Process Resident Size (MiB): 1678.07
+	JVM Flags: 4 total; -XX:StackShadowPages=32 -XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump -Xms512m -Xmx6144m
+	Debug Flags: 0 total; 
+	Fabric Mods: 
+		animatica: Animatica Refabricated 0.6.3+26.3
+		anvianslib: Anvian's Lib 1.5.0
+		appleskin: AppleSkin 3.0.10+mc26.3
+		badoptimizations: BadOptimizations 2.4.1
+		balm: Balm 26.3.0.3
+			kuma_api: KumaAPI 26.3.0.1
+		betterblockentities: BBE 1.4.0+mc26.3
+		betterf3: BetterF3 20.0.0
+		bettergrass: BetterGrassify 1.8.8+fabric.26.3
+		bettermounthud: Better Mount HUD 1.3.1
+		betterresolution: BetterResolution 1.1.0
+		block-event-separator: Block Event Separator 1.3.0
+		boatiview: Boat Item View 0.0.11
+		c2me: Concurrent Chunk Management Engine 0.4.2-alpha.0.106+26.3
+			c2me-base: Concurrent Chunk Management Engine (Base) 0.4.2-alpha.0.106+26.3
+			c2me-client-uncapvd: Concurrent Chunk Management Engine (Client/Uncap View Distance) 0.4.2-alpha.0.106+26.3
+			c2me-fixes-chunkio-threading-issues: Concurrent Chunk Management Engine (Fixes/Chunk IO/Threading Issues) 0.4.2-alpha.0.106+26.3
+			c2me-fixes-general-threading-issues: Concurrent Chunk Management Engine (Fixes/General/Threading Issues) 0.4.2-alpha.0.106+26.3
+			c2me-fixes-worldgen-threading-issues: Concurrent Chunk Management Engine (Fixes/WorldGen/Threading Issues) 0.4.2-alpha.0.106+26.3
+			c2me-fixes-worldgen-vanilla-bugs: Concurrent Chunk Management Engine (Fixes/WorldGen/Vanilla Bugs) 0.4.2-alpha.0.106+26.3
+			c2me-notickvd: Concurrent Chunk Management Engine (No Tick View Distance) 0.4.2-alpha.0.106+26.3
+			c2me-opts-allocs: Concurrent Chunk Management Engine (Optimizations/Memory Allocations) 0.4.2-alpha.0.106+26.3
+			c2me-opts-chunkio: Concurrent Chunk Management Engine (Optimizations/Chunk IO) 0.4.2-alpha.0.106+26.3
+			c2me-opts-math: Concurrent Chunk Management Engine (Optimizations/Math) 0.4.2-alpha.0.106+26.3
+			c2me-opts-natives-math: Concurrent Chunk Management Engine (Optimizations/Natives Math) 0.4.2-alpha.0.106+26.3
+			c2me-opts-scheduling: Concurrent Chunk Management Engine (Optimizations/Scheduling) 0.4.2-alpha.0.106+26.3
+			c2me-opts-worldgen-general: Concurrent Chunk Management Engine (Optimizations/General WorldGen) 0.4.2-alpha.0.106+26.3
+			c2me-opts-worldgen-vanilla: Concurrent Chunk Management Engine (Optimizations/Vanilla WorldGen) 0.4.2-alpha.0.106+26.3
+			c2me-rewrites-chunk-serializer: Concurrent Chunk Management Engine (Rewrites/Chunk Serializer) 0.4.2-alpha.0.106+26.3
+			c2me-rewrites-chunk-system: Concurrent Chunk Management Engine (Rewrites/Chunk System) 0.4.2-alpha.0.106+26.3
+			c2me-rewrites-chunkio: Concurrent Chunk Management Engine (Rewrites/Chunk IO) 0.4.2-alpha.0.106+26.3
+			c2me-server-utils: Concurrent Chunk Management Engine (Server Utils) 0.4.2-alpha.0.106+26.3
+			c2me-threading-lighting: Concurrent Chunk Management Engine (Threading/Lighting) 0.4.2-alpha.0.106+26.3
+			com_github_ben-manes_caffeine_caffeine: caffeine 3.2.1
+			com_ibm_async_asyncutil: asyncutil 0.1.0
+			io_reactivex_rxjava3_rxjava: rxjava 3.1.12
+			mixinsquared: MixinSquared 0.3.7-beta.1
+			net_objecthunter_exp4j: exp4j 0.4.8
+			org_jctools_jctools-core: jctools-core 4.0.5
+			org_reactivestreams_reactive-streams: reactive-streams 1.0.4
+		cape-provider: Cape Provider 5.6.2
+		cherishedworlds: Cherished Worlds 18.0.0+26.3
+			spectrelib: SpectreLib 0.23.0+26.3
+		clienttweaks: Client Tweaks 26.3.0.1
+			shogi_api: Shogi API 26.3.0.1
+		cloth-config: Cloth Config v26.3 26.3.159
+			cloth-basic-math: cloth-basic-math 0.6.1
+		clumps: Clumps 26.3.2
+		collective: Collective 8.67
+		computercraft: CC: Tweaked 1.120.3
+			cc_tweaked_cobalt: cobalt 0.9.9
+			com_electronwill_night-config_core: core 3.9.0
+			com_electronwill_night-config_toml: toml 3.9.0
+			io_netty_netty-codec-socks: netty-codec-socks 4.2.16
+			io_netty_netty-handler-proxy: netty-handler-proxy 4.2.16
+		config_manager: Config Manager 1.1.3
+		continuity: Continuity 3.0.1+26.3
+		controlling: Controlling 26.3.4
+		crawl: Crawl 0.15.0
+		dhmi: Don't Hide My Items! 1.1.0
+		disable_front_camera: disable front camera 1.2.18
+		dynamic_fps: Dynamic FPS 3.11.10
+			dynamic_fps_common: Dynamic FPS Common 3.11.10
+			net_lostluma_battery: battery 2.1.0
+		e4mc: e4mc 6.2.3+modern
+			folk_sisby_kaleido-config: kaleido-config 0.3.3+1.3.2
+		entity_model_features: Entity Model Features 3.3.12
+		entity_texture_features: Entity Texture Features 7.2.6
+		entityculling: EntityCulling 1.11.3
+			transition: TRansition 1.0.26
+			trender: TRender 1.0.17
+		fabric-api: Fabric API 0.165.0+26.3
+			fabric-advancement-api-v1: Fabric Advancement API (v1) 1.0.1+38c7a2d55d
+			fabric-api-base: Fabric API Base 2.0.6+fcdff87f5d
+			fabric-api-lookup-api-v1: Fabric API Lookup API (v1) 2.0.24+3434d6d95d
+			fabric-biome-api-v1: Fabric Biome API (v1) 20.1.1+85210bca5d
+			fabric-block-api-v1: Fabric Block API (v1) 3.1.0+0ae6f9115d
+			fabric-block-getter-api-v2: Fabric BlockGetter API (v2) 2.0.9+3434d6d95d
+			fabric-command-api-v2: Fabric Command API (v2) 3.1.2+fcdff87f5d
+			fabric-content-registries-v0: Fabric Content Registries (v0) 15.0.6+74ed1ea55d
+			fabric-convention-tags-v2: Fabric Convention Tags (v2) 4.10.5+187b64905d
+			fabric-crash-report-info-v1: Fabric Crash Report Info (v1) 1.0.7+fcdff87f5d
+			fabric-creative-tab-api-v1: Fabric Creative Tab API (v1) 5.0.22+fcdff87f5d
+			fabric-data-attachment-api-v1: Fabric Data Attachment API (v1) 2.2.33+b9b88df45d
+			fabric-data-generation-api-v1: Fabric Data Generation API (v1) 27.4.2+187b64905d
+			fabric-debug-api-v1: Fabric Debug API (v1) 1.0.5+5af7744b5d
+			fabric-dimensions-v1: Fabric Dimensions API (v1) 5.1.20+5af7744b5d
+			fabric-entity-events-v1: Fabric Entity Events (v1) 6.0.4+3434d6d95d
+			fabric-events-interaction-v0: Fabric Events Interaction (v0) 5.3.9+b9b88df45d
+			fabric-game-rule-api-v1: Fabric Game Rule API (v1) 4.0.10+3434d6d95d
+			fabric-item-api-v1: Fabric Item API (v1) 14.8.0+d1c0d72b5d
+			fabric-key-mapping-api-v1: Fabric Key Mapping API (v1) 2.0.8+3434d6d95d
+			fabric-lifecycle-events-v1: Fabric Lifecycle Events (v1) 4.1.9+ffef5f675d
+			fabric-loot-api-v3: Fabric Loot API (v3) 4.0.9+4068fd645d
+			fabric-menu-api-v1: Fabric Menu API (v1) 2.0.30+ed66f0a35d
+			fabric-message-api-v1: Fabric Message API (v1) 7.0.10+3434d6d95d
+			fabric-model-loading-api-v1: Fabric Model Loading API (v1) 8.0.37+fcdff87f5d
+			fabric-networking-api-v1: Fabric Networking API (v1) 6.4.0+a21c9eb65d
+			fabric-object-builder-api-v1: Fabric Object Builder API (v1) 24.1.12+e2f63d3e5d
+			fabric-particles-v1: Fabric Particles (v1) 5.0.27+3434d6d95d
+			fabric-permission-api-v1: Fabric Permission API (v1) 1.0.8+fcdff87f5d
+			fabric-recipe-api-v1: Fabric Recipe API (v1) 10.0.11+b9b88df45d
+			fabric-registry-sync-v0: Fabric Registry Sync (v0) 8.0.4+1ca9f6365d
+			fabric-renderer-api-v1: Fabric Renderer API (v1) 17.0.17+79385d0b5d
+			fabric-renderer-indigo: Fabric Renderer - Indigo 9.1.25+b9d63e335d
+			fabric-rendering-fluids-v1: Fabric Rendering Fluids (v1) 6.0.6+3434d6d95d
+			fabric-rendering-v1: Fabric Rendering (v1) 27.2.0+eb9fe70b5d
+			fabric-resource-conditions-api-v1: Fabric Resource Conditions API (v1) 6.2.0+0d124ae85d
+			fabric-resource-loader-v0: Fabric Resource Loader (v0) 3.3.27+4fc5413f5d
+			fabric-resource-loader-v1: Fabric Resource Loader (v1) 3.1.0+5af7744b5d
+			fabric-screen-api-v1: Fabric Screen API (v1) 5.2.4+48607d035d
+			fabric-serialization-api-v1: Fabric Serialization API (v1) 2.0.7+74ed1ea55d
+			fabric-sound-api-v1: Fabric Sound API (v1) 2.0.7+3434d6d95d
+			fabric-tag-api-v1: Fabric Tag API (v1) 2.1.11+fcdff87f5d
+			fabric-transfer-api-v1: Fabric Transfer API (v1) 8.0.25+fcdff87f5d
+			fabric-transitive-access-wideners-v1: Fabric Transitive Access Wideners (v1) 8.1.17+e2f63d3e5d
+		fabric-language-kotlin: Fabric Language Kotlin 1.14.2+kotlin.2.4.21
+			org_jetbrains_kotlin_kotlin-reflect: kotlin-reflect 2.4.21
+			org_jetbrains_kotlin_kotlin-stdlib: kotlin-stdlib 2.4.21
+			org_jetbrains_kotlin_kotlin-stdlib-jdk7: kotlin-stdlib-jdk7 2.4.21
+			org_jetbrains_kotlin_kotlin-stdlib-jdk8: kotlin-stdlib-jdk8 2.4.21
+			org_jetbrains_kotlinx_atomicfu-jvm: atomicfu-jvm 0.33.0
+			org_jetbrains_kotlinx_kotlinx-coroutines-core-jvm: kotlinx-coroutines-core-jvm 1.11.0
+			org_jetbrains_kotlinx_kotlinx-coroutines-jdk8: kotlinx-coroutines-jdk8 1.11.0
+			org_jetbrains_kotlinx_kotlinx-datetime-jvm: kotlinx-datetime-jvm 0.8.0
+			org_jetbrains_kotlinx_kotlinx-io-bytestring-jvm: kotlinx-io-bytestring-jvm 0.9.1
+			org_jetbrains_kotlinx_kotlinx-io-core-jvm: kotlinx-io-core-jvm 0.9.1
+			org_jetbrains_kotlinx_kotlinx-serialization-cbor-jvm: kotlinx-serialization-cbor-jvm 1.11.0
+			org_jetbrains_kotlinx_kotlinx-serialization-core-jvm: kotlinx-serialization-core-jvm 1.11.0
+			org_jetbrains_kotlinx_kotlinx-serialization-json-jvm: kotlinx-serialization-json-jvm 1.11.0
+		fabricloader: Fabric Loader 0.20.1
+			mixinextras: MixinExtras 0.5.5
+		fastquit: FastQuit 3.1.5+mc26.2
+		ferritecore: FerriteCore 9.0.0
+		freelook: Freelook 1.4.4
+		frozenlib: FrozenLib 3.0.3
+		fzzy_config: Fzzy Config 0.7.7+fix3+26.3
+			blue_endless_jankson: jankson 1.2.3
+			fabric-permissions-api-v0: fabric-permissions-api 0.7.0
+			net_peanuuutz_tomlkt_tomlkt-jvm: tomlkt-jvm 0.3.7
+		immediatelyfast: ImmediatelyFast 1.17.1+26.3
+		inventoryhud: Inventory HUD + 3.4.36
+		iris: Iris 1.11.7+mc26.3
+			io_github_douira_glsl-transformer: glsl-transformer 3.0.0-pre3
+			org_anarres_jcpp: jcpp 1.4.14
+			org_antlr_antlr4-runtime: antlr4-runtime 4.13.1
+		ixeris: Ixeris 4.6.10+26.3-fabric
+		jade: Jade 26.3.5+fabric
+		java: OpenJDK 64-Bit Server VM 25
+		lambdynlights: LambDynamicLights 4.13.0+26.3
+			lambdynlights_api: LambDynamicLights (API) 4.13.0+26.3
+			pride: Pride Lib 1.8.0+26.3
+			spruceui: SpruceUI 12.0.0+26.3
+			yumi_mc_core: Yumi Minecraft Libraries: Foundation 1.1.3+26.2
+				yumi_commons_collections: Yumi Commons: Collections 2.0.0
+				yumi_commons_core: Yumi Commons: Core 2.0.0
+				yumi_commons_event: Yumi Commons: Event 2.0.0
+		livinghorizon: Living Horizon 0.12.0
+		main_menu_credits: Main Menu Credits 1.4.0+26.2
+		mineable_trial_spawner: Mineable Trial Spawner 1-v1.2.0
+		minecraft: Minecraft 26.3
+		modernfix: ModernFix 5.27.20-build.2
+		modmenu: Mod Menu 21.0.0
+		morechathistory: More Chat History 2.0.0
+		moreculling: More Culling 1.9.0
+			conditional-mixin: conditional mixin 0.6.3
+		mountopacity: Mount Opacity 1.2.5
+		mousetweaks: Mouse Tweaks 2.31
+		movable_block_entities: Configurable Movable Block Entities 0.1.0
+			com_heybroy0_core: core 0.1.0
+		mr_mounts_staystill: Mounts stay still 1.3.2
+		mr_shear_leaflitter: Shear Leaf Litter 1-v1.0.1
+		mr_unsilkable: unsilkable 2.0.1
+		notenoughcrashes: Not Enough Crashes 4.5.1+26.3
+		optigui: OptiGUI 2.3.0-beta.10+26.3
+			org_apache_commons_commons-text: commons-text 1.12.0
+			org_ini4j_ini4j: ini4j 0.5.4
+		optimizedcushions: Optimized Cushions 1.2.0
+		particle_core: Particle Core 0.3.3+fix1+26.2
+		placeholder-api: Placeholder API 3.2.0+26.3
+		railoptimization: RailOptimization 2.5-snapshot.1
+		reeses-sodium-options: Reese's Sodium Options 2.2.6-beta.1+mc26.3
+		renice-shot: Renice Shot 1.2.1+mc26.3
+		rrls: Remove Reloading Screen 5.2.8+mc.26.3
+		scalablelux: ScalableLux 0.3.0-alpha.0.6+26.3
+		searchables: Searchables 1.0.3
+		shulkerboxtooltip: Shulker Box Tooltip 5.4.2+26.3
+		silkiertouch: Silkier Touch 1.4
+		sodium: Sodium 0.9.3-beta.1+mc26.3
+		sodium-extra: Sodium Extra 0.9.4+mc26.3
+			me_flashyreese_mods_greenlight-api: greenlight-api 0.1.0+mc26.3
+		sodiumextrainformation: Sodium Extra Information 2.9.1
+		spark: spark 1.10.187
+		sspb: Sodium Shadowy Path Blocks 8.0.0
+		trade_cycling: Trade Cycling 1.0.23+26.3
+		villager-inventory-hwyla-plugin: Villager Inventory Plugin for Hwyla forks 2.0.3
+		voxy: Voxy 0.2.20-beta
+			org_apache_commons_commons-pool2: commons-pool2 2.12.0
+			org_lwjgl_lwjgl-lmdb: lwjgl-lmdb 3.4.1
+			org_lwjgl_lwjgl-lmdb_natives-linux: lwjgl-lmdb 3.4.1
+			org_lwjgl_lwjgl-lmdb_natives-windows: lwjgl-lmdb 3.4.1
+			org_lwjgl_lwjgl-zstd: lwjgl-zstd 3.4.1
+			org_lwjgl_lwjgl-zstd_natives-linux: lwjgl-zstd 3.4.1
+			org_lwjgl_lwjgl-zstd_natives-windows: lwjgl-zstd 3.4.1
+			org_lz4_lz4-java: lz4-java 1.8.0
+			org_rocksdb_rocksdbjni: rocksdbjni 10.2.1
+			org_tukaani_xz: xz 1.10
+			redis_clients_jedis: jedis 5.1.0
+		voxy-extra: Voxy Extra 0.2.8
+		voxy-seam-fix: Voxy Seam Fix 0.2.1
+		voxy_snow_fluid_fix: Voxy Snow, Water & Ice Fix 1.0.0
+		voxyworldgenv3: Voxygen 3.0.0
+		yet_another_config_lib_v3: YetAnotherConfigLib 3.9.7+26.3-fabric
+			com_twelvemonkeys_common_common-image: common-image 3.12.0
+			com_twelvemonkeys_common_common-io: common-io 3.12.0
+			com_twelvemonkeys_common_common-lang: common-lang 3.12.0
+			com_twelvemonkeys_imageio_imageio-core: imageio-core 3.12.0
+			com_twelvemonkeys_imageio_imageio-metadata: imageio-metadata 3.12.0
+			com_twelvemonkeys_imageio_imageio-webp: imageio-webp 3.12.0
+			org_quiltmc_parsers_gson: gson 0.2.1
+			org_quiltmc_parsers_json: json 0.2.1
+		zconfig: ZConfig 1.0.0+26.x
+		zfastnoise: Fast Noise 1.1.1+26.3
+			zfastnoise-ocl: Fast Noise Ocl Integration 1.0.0-beta.1+26.3
+		zoomify: Zoomify 2.17.0+mc26.3
+	Loaded Shaderpack: (off)
+	Yumi MC Core: 1.1.3+26.2
+	Server Running: true
+	Player Count: 1 / 8; [ServerPlayer['HeyBroyO'/18, l='ServerLevel[New World]', x=-7.02, y=-55.23, z=-3.89]]
+	Active Data Packs: vanilla, collective (incompatible), computercraft (incompatible), fabric-convention-tags-v2, frozenlib, mineable_trial_spawner, mr_mounts_staystill, mr_shear_leaflitter, mr_unsilkable, silkiertouch
+	Available Data Packs: collective (incompatible), computercraft (incompatible), fabric-convention-tags-v2, frozenlib, mineable_trial_spawner, minecart_improvements, mr_mounts_staystill, mr_shear_leaflitter, mr_unsilkable, redstone_experiments, silkiertouch, trade_rebalance, vanilla
+	Enabled Feature Flags: minecraft:vanilla
+	World Generation: Stable
+	World Seed: -3688262583699186622
+	Suppressed Exceptions: ~~NONE~~
+	Type: Integrated Server
+	Is Modded: Definitely; Client brand changed to 'fabric'; Server brand changed to 'fabric'
+	Launched Version: 26.3
+	Client Crashes Since Restart: 0
+	Integrated Server Crashes Since Restart: 1
+	Suspected Mods: FrozenLib (frozenlib), Minecraft (minecraft)
