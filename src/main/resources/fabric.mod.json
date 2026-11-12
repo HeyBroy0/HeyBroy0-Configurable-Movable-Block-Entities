@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "movable_block_entities",
-  "version": "\${version}",
+  "version": "${version}",
   "name": "Configurable Movable Block Entities",
   "description": "Per-block piston movement, adhesion, scheduled tick, and block entity behavior configured through the in-game GUI.",
   "authors": ["HeyBroy0"],
