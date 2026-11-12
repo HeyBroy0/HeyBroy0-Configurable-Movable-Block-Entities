@@ -1,5 +1,7 @@
 package com.heybroy0.movableblockentities.mixin;
 
+import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
+
 import com.heybroy0.movableblockentities.MovementGroups;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -14,7 +16,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PistonMovingBlockEntity.class)
-abstract class PistonMovingBlockEntityMixin {
+abstract class PistonMovingBlockEntityMixin implements PistonMovingBlockEntityInvoker {
+    @org.spongepowered.asm.mixin.gen.Invoker("finalTick")
+    @Override
+    public abstract void movableblockentities$invokeFinalTick();
     @Inject(
             method = "<init>(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;ZZ)V",
             at = @At("TAIL")

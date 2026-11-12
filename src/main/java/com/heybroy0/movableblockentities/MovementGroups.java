@@ -16,6 +16,8 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.ScheduledTick;
+import net.minecraft.world.ticks.TickContainerAccess;
+import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -94,7 +96,7 @@ public final class MovementGroups {
         if ("TRANSFER".equals(tickMode) || "DUPLICATE".equals(tickMode)) {
             LevelChunkTicks<Block> sourceTicks = blockTicks(level, source);
             if (sourceTicks != null) {
-                scheduledTicks = sourceTicks.getAll().stream()
+                scheduledTicks = sourceTicks.getAll()
                         .filter(tick -> tick.pos().equals(source) && tick.type() == movedState.getBlock())
                         .toList();
             }
@@ -169,7 +171,7 @@ public final class MovementGroups {
         guard.add(currentKey);
         guard.add(companionKey);
         try {
-            ((PistonMovingBlockEntityAccessor) (Object) companion).movableblockentities$invokeFinalTick();
+            ((PistonMovingBlockEntityInvoker) (Object) companion).movableblockentities$invokeFinalTick();
         } finally {
             guard.remove(currentKey);
             guard.remove(companionKey);
@@ -295,7 +297,13 @@ public final class MovementGroups {
 
     private static LevelChunkTicks<Block> blockTicks(Level level, BlockPos position) {
         LevelChunk chunk = level.getChunkAt(position);
-        return chunk.getBlockTicks();
+        TickContainerAccess<Block> access = chunk.getBlockTicks();
+        if (access instanceof LevelChunkTicks<?> ticks) {
+            @SuppressWarnings("unchecked")
+            LevelChunkTicks<Block> blockTicks = (LevelChunkTicks<Block>) ticks;
+            return blockTicks;
+        }
+        return null;
     }
 
     private static final class Operation {

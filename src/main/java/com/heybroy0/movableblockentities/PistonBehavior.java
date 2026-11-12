@@ -57,9 +57,9 @@ public final class PistonBehavior {
             BlockState state, net.minecraft.world.level.material.PushReaction vanilla
     ) {
         return switch (movement(state)) {
-            case MOVABLE -> net.minecraft.world.level.material.PushReaction.NORMAL;
-            case BREAKABLE -> net.minecraft.world.level.material.PushReaction.DESTROY;
-            case IMMOVABLE -> net.minecraft.world.level.material.PushReaction.BLOCK;
+            case MOVABLE -> net.minecraft.world.level.material.PushReaction.PUSH_PULL;
+            case BREAKABLE -> net.minecraft.world.level.material.PushReaction.POPPED;
+            case IMMOVABLE -> net.minecraft.world.level.material.PushReaction.IMMOVEABLE;
             case VANILLA -> vanilla;
         };
     }

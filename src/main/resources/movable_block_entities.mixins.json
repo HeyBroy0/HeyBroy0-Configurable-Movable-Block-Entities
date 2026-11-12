@@ -6,8 +6,7 @@
     "BlockStateBaseMixin",
     "PistonBaseBlockMixin",
     "PistonStructureResolverMixin",
-    "PistonMovingBlockEntityMixin",
-    "PistonMovingBlockEntityAccessor"
+    "PistonMovingBlockEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
