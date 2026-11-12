@@ -1,18 +1,19 @@
-any block set to breakable will be pushed but not pulled, instead of breaking into its item.
-Tick Transfer and duplication doesn't seem to work.
-'glazed' blocks can still be pulled when in line with the piston (directly in front of a sticky piston or directly in front one several slimeblocks away)
-push cost does not seem to work. 24 stone set to 2 (1/2 weight) is not pushable, it still has a push limit of 12.
-Block entities with inventory drop it onto the ground and contain it at their destination (duplication) except shulker boxes which drop nothing.
-Connected multiblocks like shelves, chests, doors, and beds do not move together or added to the structure resolver. Frozenlib might have a solution? 
+'glazed' blocks can still be pulled when in line with the piston (in front of the piston several slime blocks away) - one case solved
+push cost actually may have worked last version but only when set to movable, not vanilla. It still works the same way anyway. check which version is more stable.
+
+Block entities are not moveable anymore.
+Tick Transfer and duplication still doesn't seem to work, waiting further verification.
+Block entities with inventory drop it onto the ground and contain it at their destination (duplication) except shulker boxes which drop nothing. - waiting to check
+Connected multiblocks like shelves, chests, doors, and beds do not move together or added to the structure resolver.
 Doors and beds with companions moved in the same push group do not survive, blocks that require support like redstone_wire duplicates (broken and then recreated at the destination)
 Extended piston heads do not break when its base piston block breaks, is it being removed from the piston push group properly?
-levers and other hangable objects do not break off when pistons are activated and persist even after everything around them breaks and multiple updates near it. Piston push groups should be erased after 3 ticks when their usefulness is gone, although they should be erased after all blocks have landed which is a new issue we have to solve. Also only the blocks a part of the resolved piston push event should enter the piston push group. It may actually not be necessary for the piston head and base to join?
+levers and other hangable objects do not break off when pistons are activated and persist even after everything around them breaks and multiple updates near it. Piston push groups should be erased after 3 ticks when their usefulness is gone, although they should be erased after all blocks have landed which is the issue we have to solve. Also only the blocks a part of the resolved piston push event should enter the piston push group. It may actually not be necessary for the piston head and base to join?
 
 Lower priority, figure out later:
 Combine (wood type)_wall_sign and (wood type)_sign into the same block, since they refer to the same block in different forms. Not to confuse with the new hanging sign type (which also has wall variants) Banners, torches, lanterns, and more work the same way.
 
 
-Attempted to move a sculk_shrieker:
+Attempted to move a sculk_shrieker: - waiting to check
 
 ---- Minecraft Crash Report ----
 // There are four lights!
