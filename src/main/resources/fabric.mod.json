@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "movable_block_entities",
+  "version": "\${version}",
+  "name": "Configurable Movable Block Entities",
+  "description": "Per-block piston movement, adhesion, scheduled tick, and block entity behavior configured through the in-game GUI.",
+  "authors": ["HeyBroy0"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.heybroy0.movableblockentities.MovableBlockEntities"
+    ],
+    "client": [
+      "com.heybroy0.movableblockentities.client.MovableBlockEntitiesClient"
+    ]
+  },
+  "mixins": [
+    "movable_block_entities.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
