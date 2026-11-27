@@ -1,24 +1,24 @@
-'glazed' blocks can still be pulled when in line with the piston (in front of the piston several slime blocks away) - one case solved
-push cost actually may have worked last version but only when set to movable, not vanilla. It still works the same way anyway. check which version is more stable.
+issues:
 
-Block entities are not moveable anymore.
-Tick Transfer and duplication still doesn't seem to work, waiting further verification.
-Block entities with inventory drop it onto the ground and contain it at their destination (duplication) except shulker boxes which drop nothing. - waiting to check
+blocks set to 'glazed' are still pullable in certain configurations. - to fix, how does minecraft work for glazed terracotta, might we use this?
+
+Tick Transfer and duplication still doesn't seem to work
+
 Connected multiblocks like shelves, chests, doors, and beds do not move together or added to the structure resolver.
-Doors and beds with companions moved in the same push group do not survive, blocks that require support like redstone_wire duplicates (broken and then recreated at the destination)
-Extended piston heads do not break when its base piston block breaks, is it being removed from the piston push group properly?
-levers and other hangable objects do not break off when pistons are activated and persist even after everything around them breaks and multiple updates near it. Piston push groups should be erased after 3 ticks when their usefulness is gone, although they should be erased after all blocks have landed which is the issue we have to solve. Also only the blocks a part of the resolved piston push event should enter the piston push group. It may actually not be necessary for the piston head and base to join?
+
+Doors and beds with companions moved in the same push group do not survive, blocks that require support like redstone_wire duplicates (broken and then recreated at the destination) The current survival implementation is not correct at all, blocks not in the push group are somehow surviving, and blocks that are and should be protected are not being protected.
 
 Lower priority, figure out later:
+
 Combine (wood type)_wall_sign and (wood type)_sign into the same block, since they refer to the same block in different forms. Not to confuse with the new hanging sign type (which also has wall variants) Banners, torches, lanterns, and more work the same way.
 
 
-Attempted to move a sculk_shrieker:
+Attempted to move a sculk_shrieker: 
 
 ---- Minecraft Crash Report ----
-// You're mean.
+// I bet Cylons wouldn't have this problem.
 
-Time: 2026-11-27 05:58:43
+Time: 2026-11-27 07:06:12
 Description: Ticking block entity
 
 java.lang.IllegalArgumentException: Cannot get property BooleanProperty{name=shrieking, clazz=class java.lang.Boolean, values=[true, false]} as it does not exist in Block{minecraft:moving_piston}
@@ -27,9 +27,9 @@ java.lang.IllegalArgumentException: Cannot get property BooleanProperty{name=shr
 	at knot//net.minecraft.world.level.chunk.LevelChunk.setBlockState(LevelChunk.java:300)
 	at knot//net.minecraft.world.level.Level.setBlock(Level.java:234)
 	at knot//net.minecraft.world.level.LevelWriter.setBlock(LevelWriter.java:19)
-	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$50(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$49(PistonMovingBlockEntity.java)
 	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick(PistonMovingBlockEntityMixin.java:119)
-	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$46(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$45(PistonMovingBlockEntity.java)
 	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.tick(PistonMovingBlockEntity.java:334)
 	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
 	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
@@ -56,9 +56,9 @@ Stacktrace:
 	at knot//net.minecraft.world.level.chunk.LevelChunk.setBlockState(LevelChunk.java:300)
 	at knot//net.minecraft.world.level.Level.setBlock(Level.java:234)
 	at knot//net.minecraft.world.level.LevelWriter.setBlock(LevelWriter.java:19)
-	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$50(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.mixinextras$bridge$setBlock$49(PistonMovingBlockEntity.java)
 	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick(PistonMovingBlockEntityMixin.java:119)
-	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$46(PistonMovingBlockEntity.java)
+	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.wrapOperation$bgo000$frozenlib$frozenLib$setBlockTick$mixinextras$bridge$45(PistonMovingBlockEntity.java)
 	at knot//net.minecraft.world.level.block.piston.PistonMovingBlockEntity.tick(PistonMovingBlockEntity.java:334)
 	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
 	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
@@ -69,8 +69,8 @@ Details:
 	Name: minecraft:piston // net.minecraft.world.level.block.piston.PistonMovingBlockEntity
 	Cached block: Block{minecraft:moving_piston}[facing=east,type=normal]
 	Actual block: Block{minecraft:sculk_shrieker}[can_summon=false,shrieking=false,waterlogged=false]
-	Block location: World: (-10,-59,4), Section: (at 6,5,4 in -1,-4,0; chunk contains blocks -16,-64,0 to -1,319,15), Region: (-1,0; contains chunks -32,0 to -1,31, blocks -512,-64,0 to -1,319,511)
-	Block Entity NBT: {blockState:"minecraft:sculk_shrieker",extending:1b,facing:5b,frozenLib_PushedBlockEntity:{DataVersion:5023,_FabricDataVersions:{},components:{},id:"minecraft:sculk_shrieker",listener:{event_delay:0,selector:{tick:-1L}},warning_level:0,x:-11,y:-59,z:4},progress:1.0f,source:0b}
+	Block location: World: (-10,-59,2), Section: (at 6,5,2 in -1,-4,0; chunk contains blocks -16,-64,0 to -1,319,15), Region: (-1,0; contains chunks -32,0 to -1,31, blocks -512,-64,0 to -1,319,511)
+	Block Entity NBT: {blockState:"minecraft:sculk_shrieker",extending:1b,facing:5b,frozenLib_PushedBlockEntity:{DataVersion:5023,_FabricDataVersions:{},components:{},id:"minecraft:sculk_shrieker",listener:{event_delay:0,selector:{tick:-1L}},warning_level:0,x:-11,y:-59,z:2},progress:1.0f,source:0b}
 Stacktrace:
 	at knot//net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:773)
 	at knot//net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper.tick(LevelChunk.java:827)
@@ -87,10 +87,10 @@ Stacktrace:
 
 -- Affected level --
 Details:
-	All players: 1 total; ServerPlayer{name=HeyBroyO, id=3, pos=(-8.611920392276076, -55.261496655524475, 3.7476695797161264), mode=CREATIVE, permission=owner}
+	All players: 1 total; ServerPlayer{name=HeyBroyO, id=1, pos=(-9.357555848878407, -55.6253275998158, 1.3659096384785165), mode=CREATIVE, permission=owner}
 	Chunk stats: 3481
 	Level dimension: minecraft:overworld
-	Level time: 18657 game time, 18657 day time
+	Level time: 97758 game time, 97758 day time
 	Level spawn location: World: (0,-60,0), Section: (at 0,4,0 in 0,-4,0; chunk contains blocks 0,-64,0 to 15,319,15), Region: (0,0; contains chunks 0,0 to 31,31, blocks 0,-64,0 to 511,319,511)
 	Level name: New World
 	Level game mode: Game mode: creative (ID 1). Hardcore: false. Commands: true
@@ -98,8 +98,8 @@ Details:
 	Removed feature flags: 
 	Level was modded: true
 	Level storage version: 0x04ABD - Anvil
-	Loaded entity count: 3
-	Server weather: Rain time: 30503 (now: false), thunder time: 5855 (now: false)
+	Loaded entity count: 1
+	Server weather: Rain time: 49199 (now: false), thunder time: 86609 (now: false)
 Stacktrace:
 	at knot//net.minecraft.server.level.ServerLevel.fillReportDetails(ServerLevel.java:1892)
 	at knot//net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1119)
@@ -118,9 +118,9 @@ Details:
 	Operating System: Windows 11 (amd64) version 10.0
 	Java Version: 25.0.1, Microsoft
 	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode), Microsoft
-	Memory: 259935912 bytes (247 MiB) / 710934528 bytes (678 MiB) up to 4294967296 bytes (4096 MiB)
-	Memory (heap): init: 512MiB, used: 428MiB, committed: 678MiB, max: 4096MiB
-	Memory (non-heap): init: 007MiB, used: 253MiB, committed: 257MiB, max: 000MiB
+	Memory: 192339024 bytes (183 MiB) / 761266176 bytes (726 MiB) up to 4294967296 bytes (4096 MiB)
+	Memory (heap): init: 512MiB, used: 540MiB, committed: 726MiB, max: 4096MiB
+	Memory (non-heap): init: 007MiB, used: 234MiB, committed: 261MiB, max: 000MiB
 	CPUs: 16
 	Processor Vendor: AuthenticAMD
 	Processor Name: AMD Ryzen 7 5800U with Radeon Graphics         
@@ -142,19 +142,19 @@ Details:
 	Memory slot #1 clockSpeed (GHz): 3.20
 	Memory slot #1 type: DDR4
 	Virtual memory max (MiB): 16737.48
-	Virtual memory used (MiB): 12144.24
+	Virtual memory used (MiB): 12801.22
 	Swap memory total (MiB): 1024.00
-	Swap memory used (MiB): 104.09
+	Swap memory used (MiB): 105.17
 	Space in storage for jna.tmpdir (MiB): <path not set>
 	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
 	Space in storage for io.netty.native.workdir (MiB): <path not set>
-	Space in storage for java.io.tmpdir (MiB): available: 446586.78, total: 975632.00
-	Space in storage for workdir (MiB): available: 446586.78, total: 975632.00
+	Space in storage for java.io.tmpdir (MiB): available: 446359.41, total: 975632.00
+	Space in storage for workdir (MiB): available: 446359.41, total: 975632.00
 	Operating System Version: Microsoft Windows 11 build 26200
 	Process Elevated: false
-	Process Loads: Uptime: 46s, user: 162s (349.69%), kernel: 17s (36.07%), total: 179s (385.76%)
-	Process Virtual Size (MiB): 3493.50
-	Process Resident Size (MiB): 1793.42
+	Process Loads: Uptime: 171s, user: 246s (143.98%), kernel: 41s (23.98%), total: 287s (167.95%)
+	Process Virtual Size (MiB): 3470.67
+	Process Resident Size (MiB): 1850.30
 	JVM Flags: 6 total; -XX:StackShadowPages=32 -XX:+UnlockDiagnosticVMOptions -XX:-UseBASE64Intrinsics -XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump -Xms512m -Xmx4096m
 	Debug Flags: 0 total; 
 	Fabric Mods: 
@@ -210,12 +210,12 @@ Details:
 		java: OpenJDK 64-Bit Server VM 25
 		minecraft: Minecraft 26.3
 		modmenu: Mod Menu 21.0.1
-		movable_block_entities: Configurable Movable Block Entities 0.1.0
-			com_heybroy0_core: core 0.1.0
+		movable_block_entities: Configurable Movable Block Entities 0.2.0
+			com_heybroy0_core: core 0.2.0
 		notenoughcrashes: Not Enough Crashes 4.5.1+26.3
 		placeholder-api: Placeholder API 3.2.0+26.3
 	Server Running: true
-	Player Count: 1 / 8; [ServerPlayer['HeyBroyO'/3, l='ServerLevel[New World]', x=-8.61, y=-55.26, z=3.75]]
+	Player Count: 1 / 8; [ServerPlayer['HeyBroyO'/1, l='ServerLevel[New World]', x=-9.36, y=-55.63, z=1.37]]
 	Active Data Packs: vanilla, fabric-convention-tags-v2, frozenlib
 	Available Data Packs: fabric-convention-tags-v2, frozenlib, minecart_improvements, redstone_experiments, trade_rebalance, vanilla
 	Enabled Feature Flags: minecraft:vanilla
