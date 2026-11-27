@@ -34,7 +34,7 @@ abstract class BlockStateBaseMixin {
     private void movableblockentities$preserveMovingGroup(
             LevelReader level, BlockPos position, CallbackInfoReturnable<Boolean> callback
     ) {
-        if (level instanceof Level world && MovementGroups.isMoving(world, position)) {
+        if (level instanceof Level world && MovementGroups.shouldPreserveMovingMember(world, position, (net.minecraft.world.level.block.state.BlockState) (Object) this)) {
             callback.setReturnValue(true);
         }
     }
