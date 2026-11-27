@@ -23,7 +23,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * adjacent-block scan.
  */
 public final class PistonMultiblockHandlers {
-    private static final List<PistonMultiblockHandler> HANDLERS = new CopyOnWriteArrayList<>();
+    private static final CopyOnWriteArrayList<PistonMultiblockHandler> HANDLERS = new CopyOnWriteArrayList<>();
 
     static {
         register(PistonMultiblockHandlers::findDoorCompanion);
@@ -115,11 +115,15 @@ public final class PistonMultiblockHandlers {
             return false;
         }
         for (Property<?> property : first.getProperties()) {
-            if (property != ignored
-                    && !Objects.equals(first.getValues().get(property), second.getValues().get(property))) {
+            if (property != ignored && !samePropertyValue(first, second, property)) {
                 return false;
             }
         }
         return true;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean samePropertyValue(BlockState first, BlockState second, Property property) {
+        return Objects.equals(first.getValue(property), second.getValue(property));
     }
 }
