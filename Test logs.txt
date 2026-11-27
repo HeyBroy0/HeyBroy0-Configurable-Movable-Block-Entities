@@ -1,3 +1,0 @@
-Issues:
-Blocks within a structure (chests, shelves, beds, doors, tall flowers) do not pull its companion
-Moving block entities can drop a duplicate of its inventory when moved. They should be removed appropriately to not drop their inventory.
