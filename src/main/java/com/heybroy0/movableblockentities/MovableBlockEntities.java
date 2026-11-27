@@ -27,5 +27,9 @@ public final class MovableBlockEntities implements ModInitializer {
             System.err.println("[Movable Block Entities] Could not load runtime settings from "
                     + cache + ": " + exception.getMessage());
         }
+
+        // FrozenLib's own piston integration is initialized by FrozenLib.
+        // Register after loading our cache so callbacks see the final settings.
+        FrozenLibPistonIntegration.register();
     }
 }
