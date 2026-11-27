@@ -1,6 +1,7 @@
 package com.heybroy0.movableblockentities;
 
 import com.heybroy0.movableblockentities.core.RuntimeConfigCache;
+import com.heybroy0.movableblockentities.api.PistonMultiblockHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -116,7 +117,8 @@ public final class PistonBehavior {
         for (BlockPos position : positions) {
             BlockPos immutable = position.immutable();
             physicalBlocks.add(immutable);
-            addMultiblockCompanion(level, immutable, level.getBlockState(immutable), physicalBlocks);
+            BlockState state = level.getBlockState(immutable);
+            physicalBlocks.addAll(PistonMultiblockHandlers.findCompanions(level, immutable, state));
         }
 
         BigInteger numerator = BigInteger.ZERO;
@@ -142,36 +144,6 @@ public final class PistonBehavior {
         RuntimeConfigCache.BlockSettings entry = settings(state);
         // Vanilla movement keeps the exact vanilla 12-block capacity rules.
         return "VANILLA".equals(entry.movement()) ? 1 : Math.max(1, entry.pushCost());
-    }
-
-    private static void addMultiblockCompanion(
-            Level level, BlockPos position, BlockState state, Set<BlockPos> physicalBlocks
-    ) {
-        BlockPos companion = null;
-        if (state.getBlock() instanceof DoorBlock) {
-            DoubleBlockHalf half = state.getValue(DoorBlock.HALF);
-            BlockPos candidate = half == DoubleBlockHalf.UPPER ? position.below() : position.above();
-            BlockState other = level.getBlockState(candidate);
-            if (other.getBlock() == state.getBlock()
-                    && other.getValue(DoorBlock.HALF) != half) {
-                companion = candidate;
-            }
-        } else if (state.getBlock() instanceof AbstractBedBlock) {
-            BedPart part = state.getValue(AbstractBedBlock.PART);
-            Direction facing = state.getValue(HorizontalDirectionalBlock.FACING);
-            BlockPos candidate = part == BedPart.HEAD
-                    ? position.relative(facing.getOpposite())
-                    : position.relative(facing);
-            BlockState other = level.getBlockState(candidate);
-            if (other.getBlock() == state.getBlock()
-                    && other.getValue(AbstractBedBlock.PART) != part) {
-                companion = candidate;
-            }
-        }
-
-        if (companion != null) {
-            physicalBlocks.add(companion.immutable());
-        }
     }
 
     public static boolean isInsidePistonMovementBounds(Level level, BlockPos source, BlockPos destination) {
