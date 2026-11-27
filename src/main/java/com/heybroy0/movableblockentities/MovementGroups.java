@@ -1,48 +1,56 @@
 package com.heybroy0.movableblockentities;
 
+import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
+import com.heybroy0.movableblockentities.api.PistonMovementMemberHolder;
+import com.heybroy0.movableblockentities.api.PistonMultiblockHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.AbstractBedBlock;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.ScheduledTick;
 import net.minecraft.world.ticks.TickContainerAccess;
-import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Tracks independent piston transactions through movement and landing.
- * The group registry is scoped by Level and stores no permanent world data.
+ * Tracks each resolved block as a distinct member of one piston transaction.
+ *
+ * Positions are indexes used to attach a newly-created moving entity to its
+ * resolved member. Once attached, landing, companion coordination and survival
+ * protection use the member/entity identity rather than position alone.
  */
 public final class MovementGroups {
+    private static final AtomicLong NEXT_TRANSACTION_ID = new AtomicLong();
     private static final ThreadLocal<Deque<Operation>> OPERATIONS =
             ThreadLocal.withInitial(ArrayDeque::new);
-    private static final ThreadLocal<Set<PositionKey>> COORDINATION_GUARD =
+    private static final ThreadLocal<Set<PushMember>> COORDINATION_GUARD =
             ThreadLocal.withInitial(HashSet::new);
-    private static final Map<Level, Map<BlockPos, Group>> MOVING = new WeakHashMap<>();
+
+    /** Active moving destination -> exact resolved member for that movement. */
+    private static final Map<Level, Map<BlockPos, PushMember>> MOVING = new WeakHashMap<>();
 
     private MovementGroups() {
     }
 
     public static void begin(Level level) {
-        OPERATIONS.get().push(new Operation(level, new Group()));
+        OPERATIONS.get().push(new Operation(
+                level, new Group(level, NEXT_TRANSACTION_ID.incrementAndGet())
+        ));
     }
 
     public static void end(Level level) {
@@ -50,9 +58,12 @@ public final class MovementGroups {
         if (!stack.isEmpty()) {
             Operation operation = stack.pop();
             if (operation.level == level) {
-                operation.group.snapshots.keySet().retainAll(operation.group.positions);
-                if (operation.group.positions.isEmpty()) {
-                    operation.group.snapshots.clear();
+                // A member not attached to a moving piston entity was not
+                // actually accepted by the movement transaction.
+                for (PushMember member : new ArrayList<>(operation.group.members)) {
+                    if (!member.attached) {
+                        discardUnattached(member);
+                    }
                 }
             } else {
                 stack.clear();
@@ -64,8 +75,8 @@ public final class MovementGroups {
     }
 
     /**
-     * Snapshot scheduled ticks while the resolver still exposes the original source
-     * blocks. FrozenLib is the sole owner of block-entity serialization and restoration.
+     * Called while the resolver still exposes its original source states.
+     * Each resolved entry receives an identity unique within its transaction.
      */
     public static void captureResolved(Level level, List<BlockPos> sources, Direction movementDirection) {
         Deque<Operation> stack = OPERATIONS.get();
@@ -73,169 +84,221 @@ public final class MovementGroups {
         Operation operation = stack.peek();
         if (operation.level != level) return;
 
+        Group group = operation.group;
+        group.clear();
+        int sequence = 0;
         for (BlockPos sourcePosition : sources) {
             BlockPos source = sourcePosition.immutable();
+            if (group.membersBySource.containsKey(source)) {
+                continue;
+            }
+
             BlockState movedState = level.getBlockState(source);
-            if (movedState.isAir()) continue;
+            if (movedState.isAir()) {
+                continue;
+            }
 
             BlockPos destination = source.relative(movementDirection).immutable();
+            PushMember member = new PushMember(
+                    group,
+                    new MemberIdentity(group.transactionId, sequence++),
+                    source,
+                    destination,
+                    movedState
+            );
+            group.members.add(member);
+            group.membersBySource.put(source, member);
+            group.membersByDestination.put(destination, member);
+
             String tickMode = PistonBehavior.settings(movedState).scheduledTicks();
-            List<ScheduledTick<Block>> scheduledTicks = List.of();
             if ("TRANSFER".equals(tickMode) || "DUPLICATE".equals(tickMode)) {
                 LevelChunkTicks<Block> sourceTicks = blockTicks(level, source);
                 if (sourceTicks != null) {
-                    scheduledTicks = sourceTicks.getAll()
-                            .filter(tick -> tick.pos().equals(source) && tick.type() == movedState.getBlock())
+                    List<ScheduledTick<Block>> scheduledTicks = sourceTicks.getAll()
+                            .filter(tick -> tick.pos().equals(source)
+                                    && tick.type() == movedState.getBlock())
                             .toList();
+                    if (!scheduledTicks.isEmpty()) {
+                        member.snapshot = new MoveSnapshot(
+                                source, movedState.getBlock(), scheduledTicks, tickMode
+                        );
+                    }
                 }
             }
+        }
 
-            operation.group.positions.add(destination);
-            if (!scheduledTicks.isEmpty()) {
-                operation.group.snapshots.put(destination,
-                        new MoveSnapshot(source, movedState.getBlock(), scheduledTicks, tickMode));
+        // Establish explicit member-to-member relationships only when the
+        // handler's exact source position was also in the resolved list.
+        for (PushMember member : group.members) {
+            for (BlockPos companionSource : PistonMultiblockHandlers.findCompanions(
+                    level, member.source, member.expectedState
+            )) {
+                PushMember companion = group.membersBySource.get(companionSource);
+                if (companion != null && companion != member) {
+                    member.companions.add(companion);
+                }
             }
-        }
-    }
-
-    /** Called as the piston moving block entity is attached to its position. */
-    public static void register(Level level, BlockPos position) {
-        if (level == null || level.isClientSide()) {
-            return;
-        }
-        BlockPos immutable = position.immutable();
-        Deque<Operation> stack = OPERATIONS.get();
-        Group group = !stack.isEmpty() && stack.peek().level == level
-                ? stack.peek().group : new Group();
-        group.positions.add(immutable);
-        synchronized (MOVING) {
-            MOVING.computeIfAbsent(level, ignored -> new HashMap<>()).put(immutable, group);
-        }
-    }
-
-    public static boolean isMoving(Level level, BlockPos position) {
-        synchronized (MOVING) {
-            Map<BlockPos, Group> world = MOVING.get(level);
-            return world != null && world.containsKey(position);
-        }
-    }
-
-    private static boolean isSameGroup(Level level, BlockPos first, BlockPos second) {
-        synchronized (MOVING) {
-            Map<BlockPos, Group> world = MOVING.get(level);
-            return world != null && world.get(first) != null && world.get(first) == world.get(second);
         }
     }
 
     /**
-     * Finishes a door/bed companion before the first component finishes ordinary
-     * landing notifications. An invoker avoids a direct dependency on finalTick visibility.
+     * Called when a PistonMovingBlockEntity is attached to the level. The
+     * destination is used once to find the resolver-created member; a state
+     * equality check prevents attaching a different resolved block by accident.
      */
-    public static void coordinateCompanion(
-            Level level, BlockPos position, PistonMovingBlockEntity entity
-    ) {
-        if (level == null || level.isClientSide()) {
+    public static void register(Level level, PistonMovingBlockEntity entity) {
+        if (level == null || level.isClientSide() || entity == null) {
             return;
         }
 
-        BlockState movedState = entity.getMovedState();
-        BlockPos companionPosition = companionPosition(position, movedState);
-        if (companionPosition == null || !isSameGroup(level, position, companionPosition)) {
+        PistonMovementMemberHolder holder = (PistonMovementMemberHolder) entity;
+        if (holder.movableblockentities$getMovementMember() != null) {
             return;
         }
 
-        BlockEntity candidate = level.getBlockEntity(companionPosition);
-        if (!(candidate instanceof PistonMovingBlockEntity companion)
-                || !isMatchingCompanion(movedState, companion.getMovedState())) {
+        Deque<Operation> stack = OPERATIONS.get();
+        if (stack.isEmpty() || stack.peek().level != level) {
             return;
         }
 
-        PositionKey currentKey = new PositionKey(level, position.immutable());
-        PositionKey companionKey = new PositionKey(level, companionPosition.immutable());
-        Set<PositionKey> guard = COORDINATION_GUARD.get();
-        if (guard.contains(currentKey) || guard.contains(companionKey)) {
+        BlockPos destination = entity.getBlockPos().immutable();
+        PushMember member = stack.peek().group.membersByDestination.get(destination);
+        if (member == null || !member.expectedState.equals(entity.getMovedState())) {
             return;
         }
 
-        guard.add(currentKey);
-        guard.add(companionKey);
+        synchronized (MOVING) {
+            Map<BlockPos, PushMember> world = MOVING.computeIfAbsent(level, ignored -> new HashMap<>());
+            PushMember existing = world.get(destination);
+            if (existing != null && existing != member && !existing.landed) {
+                return;
+            }
+
+            holder.movableblockentities$setMovementMember(member);
+            member.movingEntity = entity;
+            member.attached = true;
+            world.put(destination, member);
+        }
+    }
+
+    /**
+     * Only the exact state represented by an attached, unresolved push member
+     * receives the temporary survival exemption. Unrelated blocks at the same
+     * position or other halves of nearby structures do not qualify.
+     */
+    public static boolean shouldPreserveMovingMember(Level level, BlockPos position, BlockState state) {
+        PushMember member;
+        synchronized (MOVING) {
+            Map<BlockPos, PushMember> world = MOVING.get(level);
+            member = world == null ? null : world.get(position);
+        }
+        if (member == null || member.landed || !member.attached
+                || !member.expectedState.equals(state) || member.movingEntity == null) {
+            return false;
+        }
+
+        PistonMovementMemberHolder holder = (PistonMovementMemberHolder) member.movingEntity;
+        return holder.movableblockentities$getMovementMember() == member
+                && member.movingEntity.getMovedState().equals(state);
+    }
+
+    /**
+     * Coordinate all resolved components of this exact structure before one
+     * component performs its ordinary finalTick. No adjacent-position scan is
+     * performed here; relationships were recorded during resolver capture.
+     */
+    public static void coordinateCompanions(PistonMovingBlockEntity entity) {
+        if (entity == null || entity.getLevel() == null || entity.getLevel().isClientSide()) {
+            return;
+        }
+
+        PushMember own = ((PistonMovementMemberHolder) entity)
+                .movableblockentities$getMovementMember();
+        if (own == null) {
+            return;
+        }
+
+        Set<PushMember> guard = COORDINATION_GUARD.get();
+        if (guard.contains(own)) {
+            return;
+        }
+
+        Set<PushMember> structure = new LinkedHashSet<>();
+        Deque<PushMember> pending = new ArrayDeque<>();
+        pending.add(own);
+        while (!pending.isEmpty()) {
+            PushMember member = pending.removeFirst();
+            if (!structure.add(member)) {
+                continue;
+            }
+            pending.addAll(member.companions);
+        }
+
+        guard.addAll(structure);
         try {
-            ((PistonMovingBlockEntityInvoker) (Object) companion).movableblockentities$invokeFinalTick();
+            for (PushMember member : structure) {
+                PistonMovingBlockEntity component = member.movingEntity;
+                if (member != own && component != null && !member.landed) {
+                    ((PistonMovingBlockEntityInvoker) (Object) component)
+                            .movableblockentities$invokeFinalTick();
+                }
+            }
         } finally {
-            guard.remove(currentKey);
-            guard.remove(companionKey);
+            guard.removeAll(structure);
             if (guard.isEmpty()) {
                 COORDINATION_GUARD.remove();
             }
         }
     }
 
-    private static BlockPos companionPosition(BlockPos position, BlockState state) {
-        if (state.getBlock() instanceof DoorBlock) {
-            return state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER
-                    ? position.below() : position.above();
-        }
-        if (state.getBlock() instanceof AbstractBedBlock) {
-            BedPart part = state.getValue(AbstractBedBlock.PART);
-            Direction facing = state.getValue(HorizontalDirectionalBlock.FACING);
-            return part == BedPart.HEAD
-                    ? position.relative(facing.getOpposite())
-                    : position.relative(facing);
-        }
-        return null;
-    }
-
-    private static boolean isMatchingCompanion(BlockState first, BlockState second) {
-        if (first.getBlock() != second.getBlock()) {
-            return false;
-        }
-        if (first.getBlock() instanceof DoorBlock) {
-            return first.getValue(DoorBlock.HALF) != second.getValue(DoorBlock.HALF);
-        }
-        if (first.getBlock() instanceof AbstractBedBlock) {
-            return first.getValue(AbstractBedBlock.PART) != second.getValue(AbstractBedBlock.PART)
-                    && first.getValue(HorizontalDirectionalBlock.FACING)
-                    == second.getValue(HorizontalDirectionalBlock.FACING);
-        }
-        return false;
-    }
-
-    /** Called after vanilla has written the final state. The operation is idempotent. */
-    public static void finish(Level level, BlockPos position, PistonMovingBlockEntity entity) {
-        if (level == null || level.isClientSide()) {
+    /** Called after FrozenLib has placed the moved state and restored its block entity. */
+    public static void finish(
+            Level level, BlockPos position, PistonMovingBlockEntity entity
+    ) {
+        if (level == null || level.isClientSide() || entity == null) {
             return;
         }
 
-        BlockPos immutable = position.immutable();
-        Group group;
+        PushMember member = ((PistonMovementMemberHolder) entity)
+                .movableblockentities$getMovementMember();
+        if (member == null || member.group.level != level) {
+            return;
+        }
+
+        BlockPos destination = position.immutable();
         MoveSnapshot snapshot;
         synchronized (MOVING) {
-            Map<BlockPos, Group> world = MOVING.get(level);
-            if (world == null) {
+            Map<BlockPos, PushMember> world = MOVING.get(level);
+            if (world == null || world.get(destination) != member) {
                 return;
             }
-            group = world.remove(immutable);
-            if (group == null) {
-                return;
-            }
-            group.positions.remove(immutable);
-            snapshot = group.snapshots.remove(immutable);
+            world.remove(destination);
             if (world.isEmpty()) {
                 MOVING.remove(level);
             }
-            if (group.positions.isEmpty()) {
-                group.snapshots.clear();
-            }
+
+            member.landed = true;
+            member.attached = false;
+            snapshot = member.snapshot;
+            member.snapshot = null;
         }
 
-        if (snapshot == null || !level.getBlockState(immutable).is(snapshot.expectedBlock)) {
-            return;
+        // A failed or substituted landing must not receive this member's ticks.
+        if (snapshot != null && member.expectedState.equals(level.getBlockState(destination))) {
+            restoreScheduledTicks(level, destination, snapshot);
         }
-
-        restoreScheduledTicks(level, immutable, snapshot);
+        member.movingEntity = null;
+        member.group.remove(member);
     }
 
-    private static void restoreScheduledTicks(Level level, BlockPos destination, MoveSnapshot snapshot) {
+    private static void discardUnattached(PushMember member) {
+        member.snapshot = null;
+        member.group.remove(member);
+    }
+
+    private static void restoreScheduledTicks(
+            Level level, BlockPos destination, MoveSnapshot snapshot
+    ) {
         if (snapshot.scheduledTicks.isEmpty()
                 || !("TRANSFER".equals(snapshot.tickMode) || "DUPLICATE".equals(snapshot.tickMode))) {
             return;
@@ -283,8 +346,80 @@ public final class MovementGroups {
     }
 
     private static final class Group {
-        private final Set<BlockPos> positions = new HashSet<>();
-        private final Map<BlockPos, MoveSnapshot> snapshots = new HashMap<>();
+        private final Level level;
+        private final long transactionId;
+        private final Set<PushMember> members = new LinkedHashSet<>();
+        private final Map<BlockPos, PushMember> membersBySource = new HashMap<>();
+        private final Map<BlockPos, PushMember> membersByDestination = new HashMap<>();
+
+        private Group(Level level, long transactionId) {
+            this.level = level;
+            this.transactionId = transactionId;
+        }
+
+        private void remove(PushMember member) {
+            members.remove(member);
+            membersBySource.remove(member.source, member);
+            membersByDestination.remove(member.destination, member);
+            if (members.isEmpty()) {
+                membersBySource.clear();
+                membersByDestination.clear();
+            }
+        }
+
+        private void clear() {
+            members.clear();
+            membersBySource.clear();
+            membersByDestination.clear();
+        }
+    }
+
+    /** Unique identity for one resolved block inside one push transaction. */
+    public record MemberIdentity(long transactionId, int sequence) {
+    }
+
+    /**
+     * A resolved source block and its moving entity form one member. The
+     * destination map is an attachment index; after attachment, member identity
+     * is carried by the PistonMovingBlockEntity itself.
+     */
+    public static final class PushMember {
+        private final Group group;
+        private final MemberIdentity identity;
+        private final BlockPos source;
+        private final BlockPos destination;
+        private final BlockState expectedState;
+        private final Set<PushMember> companions = new LinkedHashSet<>();
+        private MoveSnapshot snapshot;
+        private PistonMovingBlockEntity movingEntity;
+        private boolean attached;
+        private boolean landed;
+
+        private PushMember(
+                Group group,
+                MemberIdentity identity,
+                BlockPos source,
+                BlockPos destination,
+                BlockState expectedState
+        ) {
+            this.group = group;
+            this.identity = identity;
+            this.source = source;
+            this.destination = destination;
+            this.expectedState = expectedState;
+        }
+
+        public MemberIdentity identity() {
+            return identity;
+        }
+
+        public BlockPos source() {
+            return source;
+        }
+
+        public BlockPos destination() {
+            return destination;
+        }
     }
 
     private record MoveSnapshot(
@@ -293,8 +428,5 @@ public final class MovementGroups {
             List<ScheduledTick<Block>> scheduledTicks,
             String tickMode
     ) {
-    }
-
-    private record PositionKey(Level level, BlockPos position) {
     }
 }
