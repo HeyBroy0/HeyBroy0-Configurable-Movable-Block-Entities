@@ -64,7 +64,7 @@ The context must remain available throughout the movement and landing process, i
 Other piston push groups do not have relation to each other.
 
 ### Group Preservation
-Prevent blocks from failing survival checks before and during movement. Add a 'moving' tag that causes all survival checks to pass that is applied to all blocks in a piston push group right after a movement is successfully resolved until the end when the very last block in that group has landed.
+Prevent blocks from failing survival checks before and during movement. Add a 'moving' tag that causes all survival checks to pass that is applied to all blocks in a piston push group right after a movement is successfully resolved until the end when the very last block in that group has landed. Make the final survival check after everything else in the group has landed.
 
 ### Fast landing
 Some blocks may land faster than the normal 3-tick cooldown. (the one block ahead of a sticky piston that is powered for less than 3 ticks)
