@@ -37,7 +37,7 @@ dependencies {
     implementation "io.github.llamalad7:mixinextras-fabric:0.5.5"
 
     // FrozenLib owns block-entity snapshot/restoration during piston movement.
-    modImplementation "maven.modrinth:9KawNmQc:W1wrCkKg"
+    implementation "maven.modrinth:9KawNmQc:W1wrCkKg"
 
     implementation project(":core")
     include project(":core")
