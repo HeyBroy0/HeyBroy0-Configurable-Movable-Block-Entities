@@ -5,7 +5,6 @@ import com.heybroy0.movableblockentities.api.PistonMovingBlockEntityInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,12 +17,6 @@ abstract class PistonMovingBlockEntityMixin implements PistonMovingBlockEntityIn
     @org.spongepowered.asm.mixin.gen.Invoker("finalTick")
     @Override
     public abstract void movableblockentities$invokeFinalTick();
-
-    @Inject(method = "setLevel", at = @At("TAIL"))
-    private void movableblockentities$registerMovementGroup(Level level, CallbackInfo callback) {
-        BlockEntity self = (BlockEntity) (Object) this;
-        MovementGroups.register(level, self.getBlockPos());
-    }
 
     @Inject(method = "finalTick", at = @At("HEAD"))
     private void movableblockentities$coordinateMultiblockLanding(CallbackInfo callback) {
