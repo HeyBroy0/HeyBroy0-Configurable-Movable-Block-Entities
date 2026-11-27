@@ -1,4 +1,3 @@
 Issues:
-- Blocks normally not movable when set to movable are not retractactable by sticky pistons, only pushable.
-- Blocks that are breakable in vanilla when set to movable will still break if a block is moved to its position instead of being pushed alongside it.
-- continue other implementation steps.
+Blocks within a structure (chests, shelves, beds, doors, tall flowers) do not pull its companion
+Moving block entities can drop a duplicate of its inventory when moved. They should be removed appropriately to not drop their inventory.
