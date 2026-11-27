@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "movable_block_entities",
+  "version": "${version}",
+  "name": "Configurable Movable Block Entities",
+  "description": "Configurable piston movement, block-entity preservation, scheduled ticks, push cost, and adhesion.",
+  "authors": ["HeyBroy0"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.heybroy0.movableblockentities.MovableBlockEntities"
+    ],
+    "client": [
+      "com.heybroy0.movableblockentities.client.MovableBlockEntitiesClient"
+    ]
+  },
+  "mixins": [
+    "movable_block_entities.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*",
+    "frozenlib": ">=3.0.3"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

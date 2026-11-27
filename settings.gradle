@@ -6,6 +6,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'movable-block-entities-gui'
+rootProject.name = 'movable-block-entities'
 
 include 'core'

@@ -10,13 +10,18 @@ base {
 }
 
 repositories {
-    // Fabric Loom supplies the Minecraft and Fabric repositories required here.
+    mavenCentral()
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+    }
 }
 
 loom {
     splitEnvironmentSourceSets()
     mods {
         "movable_block_entities" {
+            sourceSet sourceSets.main
             sourceSet sourceSets.client
         }
     }
@@ -26,20 +31,31 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Fabric Loader supplies MixinExtras at runtime. This dependency exposes
+    // its WrapOperation API to the compiler without embedding a second copy.
+    implementation "io.github.llamalad7:mixinextras-fabric:0.5.5"
+
+    // FrozenLib owns block-entity snapshot/restoration during piston movement.
+    modImplementation "maven.modrinth:9KawNmQc:W1wrCkKg"
+
     implementation project(":core")
     include project(":core")
 }
 
-processResources {
-    inputs.property "version", project.version
+// Capture the value during configuration to remain compatible with
+// Gradle configuration caching.
+def configuredModVersion = providers.gradleProperty("mod_version").get()
+tasks.named("processResources") {
+    inputs.property "version", configuredModVersion
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand "version": configuredModVersion
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.release = 25
-    options.encoding = 'UTF-8'
+    options.encoding = "UTF-8"
 }
 
 java {
@@ -47,4 +63,3 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
     withSourcesJar()
 }
-

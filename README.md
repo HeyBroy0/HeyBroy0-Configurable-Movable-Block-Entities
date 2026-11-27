@@ -1,12 +1,12 @@
-# Configurable Movable Block Entities — GUI Configuration Prototype
+# Configurable Movable Block Entities — Fabric 26.3
 
-A client-side Fabric configuration prototype for Minecraft 26.3. The GUI provides block settings, searchable block-tag selectors, a hierarchical folder/selector tree, grouped selection and drag-and-drop organization, per-occurrence settings for duplicate blocks, and focus scopes for applying settings to selected groups.
+A Fabric mod for Minecraft 26.3 that combines the block-configuration GUI with configurable piston movement. This branch is based on `feature/UX` and adds common/server runtime hooks while retaining the occurrence-based configuration tree and atomic runtime cache.
 
-> **Prototype scope:** This branch stores and organizes configuration data. It does not yet implement piston movement or apply the saved movement/adhesion options to in-world block behavior.
+> **Runtime scope:** Movement, basic adhesion, push cost, scheduled ticks, movement-group survival protection, and FrozenLib block-entity handoff are wired into gameplay. Hitbox and Advanced adhesion analysis remain intentionally unimplemented, as specified in `main/README.md`.
 
 ## In-game use
 
-1. Use Minecraft 26.3 with Fabric Loader **0.20.1+**, Fabric API **0.165.2+26.3**, and Java **25**.
+1. Use Minecraft 26.3 with Fabric Loader **0.20.1+**, Fabric API **0.167.0+26.3**, and Java **25**.
 2. Build with `./gradlew build`, or install the JAR produced by the GitHub Actions build workflow.
 3. Launch Minecraft and press **O** to open the configuration screen. Rebind the key under **Options → Controls → Key Binds → Movable Block Entities**.
 
@@ -103,7 +103,7 @@ Back up both `settings.properties` and the generated cache before testing develo
 Minecraft 26.3's current Fabric toolchain requires Java 25:
 
 ```sh
-# Build the complete Fabric GUI prototype and its bundled core API.
+# Build the complete Fabric mod and its bundled core API.
 ./gradlew clean build
 
 # Build the GUI-independent runtime configuration API by itself.
@@ -112,6 +112,27 @@ Minecraft 26.3's current Fabric toolchain requires Java 25:
 
 The `:core` project is a pure Java library module and can be compiled without compiling the GUI source. The full Fabric artifact bundles that API for convenience. The core jar is also published as a separate build artifact, so a future non-GUI mod/runtime project can consume it independently.
 
-## Scope and limitations
+## Runtime implementation status
 
-This branch is a **GUI/configuration prototype**. It does not implement piston movement, a movement resolver, block-entity transfer, multiblock movement, scheduled-tick preservation, or runtime adhesion behavior. The GUI stores and organizes these options, but they do not yet change in-world block behavior. A successful CI build verifies compilation and artifact packaging, not in-game interaction or gameplay behavior.
+The runtime reads only the generated `runtime-config.properties` snapshot through the GUI-independent `:core` module. It does not parse the editable GUI tree during piston movement.
+
+Implemented in this branch:
+- **Movement:** `VANILLA`, `MOVABLE`, `BREAKABLE`, and `IMMOVABLE` are connected to piston push reactions. Configured movable blocks bypass vanilla's block-entity rejection while retaining world bounds and piston recursion checks.
+- **Block entities:** FrozenLib 3.0.3 owns NBT capture and restoration. The piston source-replacement mixin also applies FrozenLib's block-entity side-effect skip flag to configured movable block entities, preventing shrieker-style callbacks from receiving a `minecraft:moving_piston` state.
+- **Push cost:** positive integer denominators are accumulated as exact rational costs; vanilla-configured blocks retain the vanilla 12-block capacity.
+- **Scheduled ticks:** `VANILLA`, `TRANSFER`, and `DUPLICATE` snapshot pending block ticks and restore them at the destination with their trigger time, priority, and sub-tick order.
+- **Adhesion:** vanilla, all-face adhesive, and glazed behavior are implemented. Slime/honey incompatibility remains vanilla unless an adhesive override is explicitly configured.
+- **Movement groups:** moving positions are tracked per piston transaction; survival checks are preserved during movement, landing completion is idempotent, and door/bed companions are coordinated when both are part of the same movement group.
+- **Configuration:** the UX branch's GUI tree, occurrence-specific settings, tag selectors, undo/redo, and separate versioned runtime cache are retained.
+
+Known limitations and test status:
+- Hitbox and Advanced adhesion editors persist settings, but their geometry analysis and runtime behavior are intentionally not implemented yet.
+- Automatic multiblock handling currently covers doors and beds. Modded multiblock adapters, tall-plant coverage, and complete compatibility hooks remain future work.
+- Double chests and shelves rely on FrozenLib's own pushability/stickiness integration; they are not run through coordinated landing.
+- Fast-landing and all companion permutations still require in-game regression testing.
+- The build workflow runs on Java 25 and uploads the mod/core jars. A successful compile is not evidence of gameplay compatibility; see the movement and regression tests in the project requirements.
+
+## Verified development versions
+
+The checked-in toolchain targets Minecraft **26.3**, Java **25**, Fabric Loader **0.20.1**, Fabric API **0.167.0+26.3**, and FrozenLib **3.0.3-mc26.3-fabric**. The FrozenLib dependency is declared in mod metadata and supplied to the development environment through Modrinth Maven.
+
