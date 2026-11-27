@@ -34,6 +34,13 @@ public final class FrozenLibPistonIntegration {
             };
         });
 
+        // FrozenLib fires this only after the moved state has been placed and
+        // its saved block entity restored. Use that stable landing boundary
+        // for tick restoration/group completion instead of guessing at vanilla
+        // finalTick bytecode or wrapping Level.setBlock ourselves.
+        PistonEvents.ON_MOVING_BLOCK_SET.register((level, position, state, movingEntity) ->
+                MovementGroups.finish(level, position, movingEntity));
+
         PistonEvents.TRY_STICK_BLOCKS_TOGETHER.register((first, second, direction) -> {
             AdhesionPair pair = adhesionPair(first, second);
             if (pair.glazed()) {
