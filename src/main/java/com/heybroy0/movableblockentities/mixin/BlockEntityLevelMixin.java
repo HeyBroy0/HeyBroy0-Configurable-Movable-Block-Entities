@@ -19,7 +19,7 @@ abstract class BlockEntityLevelMixin {
     private void movableblockentities$registerPistonMovement(Level level, CallbackInfo callback) {
         BlockEntity self = (BlockEntity) (Object) this;
         if (self instanceof PistonMovingBlockEntity) {
-            MovementGroups.register(level, self.getBlockPos());
+            MovementGroups.register(level, (PistonMovingBlockEntity) self);
         }
     }
 }
